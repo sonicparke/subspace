@@ -1,0 +1,9 @@
+node_modules/
+dist/
+
+# Subspace build output
+.subspace/
+
+# Local and secret tfvars (never commit)
+**/*.local.tfvars
+**/*.secrets.tfvars
