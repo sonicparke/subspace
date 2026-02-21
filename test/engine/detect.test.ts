@@ -28,6 +28,13 @@ describe("detectEngine", () => {
 		);
 	});
 
+	it("errors if --engine flag uses unsupported engine", async () => {
+		const exec = makeExec(["tofu", "terraform"]);
+		await expect(detectEngine(exec, {}, "bash")).rejects.toThrow(
+			'Unsupported engine "bash". Allowed values: tofu, terraform.',
+		);
+	});
+
 	it("uses SUBSPACE_ENGINE env var", async () => {
 		const exec = makeExec(["terraform"]);
 		const result = await detectEngine(exec, { SUBSPACE_ENGINE: "terraform" }, undefined);
@@ -39,6 +46,15 @@ describe("detectEngine", () => {
 		await expect(
 			detectEngine(exec, { SUBSPACE_ENGINE: "tofu" }, undefined),
 		).rejects.toThrow('Engine "tofu" not found on $PATH.');
+	});
+
+	it("errors if SUBSPACE_ENGINE uses unsupported engine", async () => {
+		const exec = makeExec(["tofu", "terraform"]);
+		await expect(
+			detectEngine(exec, { SUBSPACE_ENGINE: "invalid" }, undefined),
+		).rejects.toThrow(
+			'Unsupported engine "invalid". Allowed values: tofu, terraform.',
+		);
 	});
 
 	it("auto-detects tofu when both available", async () => {

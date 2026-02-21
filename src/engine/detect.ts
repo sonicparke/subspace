@@ -2,6 +2,7 @@ import type { SubspaceContext } from "../context.js";
 
 type ExecFn = SubspaceContext["exec"];
 type EnvMap = SubspaceContext["env"];
+const SUPPORTED_ENGINES = new Set(["tofu", "terraform"]);
 
 /**
  * Resolve which engine binary to use.
@@ -13,12 +14,14 @@ export async function detectEngine(
 	engineFlag: string | undefined,
 ): Promise<string> {
 	if (engineFlag) {
+		assertEngineSupported(engineFlag);
 		await assertEngineExists(exec, engineFlag);
 		return engineFlag;
 	}
 
 	const envEngine = env.SUBSPACE_ENGINE;
 	if (envEngine) {
+		assertEngineSupported(envEngine);
 		await assertEngineExists(exec, envEngine);
 		return envEngine;
 	}
@@ -30,6 +33,14 @@ export async function detectEngine(
 	throw new Error(
 		"No engine found. Install OpenTofu (tofu) or Terraform, or specify --engine.",
 	);
+}
+
+function assertEngineSupported(name: string): void {
+	if (!SUPPORTED_ENGINES.has(name)) {
+		throw new Error(
+			`Unsupported engine "${name}". Allowed values: tofu, terraform.`,
+		);
+	}
 }
 
 async function isOnPath(exec: ExecFn, name: string): Promise<boolean> {

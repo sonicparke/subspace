@@ -1,9 +1,13 @@
 import { createCli } from "trpc-cli";
+import { execFile as execFileCb } from "node:child_process";
+import { promisify } from "node:util";
 import { router } from "./router.js";
 import { version } from "./version.js";
 import { preprocessArgv } from "./argv/preprocess.js";
 import { detectEngine } from "./engine/detect.js";
 import { createRealContext } from "./context.js";
+
+const execFileAsync = promisify(execFileCb);
 
 async function main() {
 	const raw = process.argv.slice(2);
@@ -16,16 +20,11 @@ async function main() {
 	try {
 		engine = await detectEngine(
 			async (cmd, args) => {
-				const { exec: execCb } = await import("node:child_process");
-				const { promisify } = await import("node:util");
-				const execAsync = promisify(execCb);
 				try {
-					const { stdout, stderr } = await execAsync(
-						[cmd, ...args].join(" "),
-					);
+					const { stdout, stderr } = await execFileAsync(cmd, args);
 					return { stdout, stderr, exitCode: 0 };
 				} catch (err: unknown) {
-					const e = err as { stdout: string; stderr: string; code: number };
+					const e = err as { stdout?: string; stderr?: string; code?: number };
 					return { stdout: e.stdout ?? "", stderr: e.stderr ?? "", exitCode: e.code ?? 1 };
 				}
 			},

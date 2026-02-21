@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, readFile, readdir, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFile as execFileCb } from "node:child_process";
@@ -8,16 +8,42 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFileCb);
 
 const PROJECT_ROOT = join(import.meta.dirname, "../..");
-const TSX = join(PROJECT_ROOT, "node_modules/.bin/tsx");
 const CLI = join(PROJECT_ROOT, "src/cli.ts");
+const FAKE_BIN_DIR = ".subspace-test-bin";
+const FAKE_TOFU = "tofu";
+const FAKE_TOFU_SCRIPT = `#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == "--version" ]]; then
+  echo "OpenTofu v0.0.0-test"
+  exit 0
+fi
+exit 0
+`;
+
+const ensureFakeTofu = async (cwd: string) => {
+	const binDir = join(cwd, FAKE_BIN_DIR);
+	await mkdir(binDir, { recursive: true });
+	const tofuPath = join(binDir, FAKE_TOFU);
+	await writeFile(tofuPath, FAKE_TOFU_SCRIPT, "utf-8");
+	await chmod(tofuPath, 0o755);
+	return binDir;
+};
 
 const run = async (args: string, opts: { cwd: string }) => {
+	const fakeBin = await ensureFakeTofu(opts.cwd);
 	const argv = args.split(/\s+/).filter(Boolean);
 	try {
 		const { stdout, stderr } = await execFileAsync(
-			TSX,
+			"bun",
 			[CLI, ...argv],
-			{ cwd: opts.cwd, env: { ...process.env, SUBSPACE_ENGINE: "tofu" } },
+			{
+				cwd: opts.cwd,
+				env: {
+					...process.env,
+					SUBSPACE_ENGINE: "tofu",
+					PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+				},
+			},
 		);
 		return { stdout, stderr, exitCode: 0 };
 	} catch (err: unknown) {
@@ -142,6 +168,6 @@ describe("CLI integration", () => {
 	it("--engine flag overrides detection", async () => {
 		const result = await run("--engine nonexistent plan mystack", { cwd: tmpDir });
 		expect(result.exitCode).not.toBe(0);
-		expect(result.stderr).toContain("not found");
+		expect(result.stderr).toContain("Unsupported engine");
 	});
 });
