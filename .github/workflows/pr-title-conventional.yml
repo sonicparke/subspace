@@ -33,4 +33,5 @@ jobs:
             ci
             chore
             revert
+            Revert
           requireScope: false
