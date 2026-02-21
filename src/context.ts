@@ -1,11 +1,11 @@
 import type { Stats } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { exec as execCb } from "node:child_process";
+import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
 import { spawn } from "node:child_process";
 
-const execAsync = promisify(execCb);
+const execFileAsync = promisify(execFileCb);
 
 export interface ExecResult {
 	stdout: string;
@@ -52,13 +52,10 @@ export function createRealContext(
 	return {
 		exec: async (cmd, args) => {
 			try {
-				const { stdout, stderr } = await execAsync(
-					[cmd, ...args].map((a) => (a.includes(" ") ? `"${a}"` : a)).join(" "),
-					{ cwd },
-				);
+				const { stdout, stderr } = await execFileAsync(cmd, args, { cwd });
 				return { stdout, stderr, exitCode: 0 };
 			} catch (err: unknown) {
-				const e = err as { stdout: string; stderr: string; code: number };
+				const e = err as { stdout?: string; stderr?: string; code?: number };
 				return { stdout: e.stdout ?? "", stderr: e.stderr ?? "", exitCode: e.code ?? 1 };
 			}
 		},

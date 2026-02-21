@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun build src/cli.ts --compile --outfile dist/subspace --define BUILD_VERSION=\\\"$npm_package_version\\\"",
+    "build": "bun build src/cli.ts --compile --outfile dist/subspace --define BUILD_VERSION=\\\"$npm_package_version\\\" && pnpm run install:bin",
+    "install:bin": "install -m 755 dist/subspace /opt/homebrew/bin/subspace",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "biome lint .",

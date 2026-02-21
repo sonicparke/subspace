@@ -71,6 +71,54 @@ terraform {
 		expect(result).toBeNull();
 	});
 
+	it("detects backend from backend.tf.json", async () => {
+		const ctx = createMockContext({
+			files: {
+				"build/backend.tf.json": JSON.stringify({
+					terraform: {
+						backend: {
+							s3: {
+								bucket: "my-bucket",
+							},
+						},
+					},
+				}),
+			},
+		});
+		const result = await detectBackend(ctx, "build");
+		expect(result).toBe("s3");
+	});
+
+	it("detects backend from terraform array in tf.json", async () => {
+		const ctx = createMockContext({
+			files: {
+				"build/backend.tf.json": JSON.stringify({
+					terraform: [
+						{
+							backend: {
+								gcs: {
+									bucket: "my-bucket",
+								},
+							},
+						},
+					],
+				}),
+			},
+		});
+		const result = await detectBackend(ctx, "build");
+		expect(result).toBe("gcs");
+	});
+
+	it("returns null for invalid backend.tf.json", async () => {
+		const ctx = createMockContext({
+			files: {
+				"build/backend.tf.json": "{ invalid json",
+			},
+		});
+		const result = await detectBackend(ctx, "build");
+		expect(result).toBeNull();
+	});
+
 	it("returns null when dir does not exist", async () => {
 		const ctx = createMockContext();
 		const result = await detectBackend(ctx, "nonexistent");
