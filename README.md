@@ -16,8 +16,9 @@ pnpm build          # produces dist/subspace
 Create a stack and run your first plan:
 
 ```bash
-mkdir -p app/stacks/network
-# add your .tf files to app/stacks/network/
+dist/subspace new project demo
+cd demo
+dist/subspace new stack network
 dist/subspace plan network
 ```
 
@@ -27,6 +28,8 @@ dist/subspace plan network
 subspace plan    <stack> [env] [--engine tofu|terraform] -- <engineArgs...>
 subspace apply   <stack> [env] [--engine tofu|terraform] -- <engineArgs...>
 subspace destroy <stack> [env] [--engine tofu|terraform] -- <engineArgs...>
+subspace new     <project|module|stack> <name> [backend] [region]
+subspace new                                  # interactive generator mode
 subspace doctor
 ```
 
@@ -46,6 +49,25 @@ subspace apply network staging -- -target=module.vpc
 # Destroy with a specific engine
 subspace destroy network dev --engine terraform
 
+# Generate a new project scaffold
+subspace new project demo
+
+# Interactive generator prompts for missing values
+subspace new
+# Use arrow keys and Enter to navigate generator/backend choices
+
+# Optional explicit backend for project scaffold
+subspace new project demo s3
+
+# Optional explicit region for s3/gcs backends
+subspace new project demo s3 us-west-2
+
+# Generate a module inside a Subspace project
+subspace new module vpc
+
+# Generate a stack inside a Subspace project
+subspace new stack network
+
 # Check your local environment
 subspace doctor
 ```
@@ -53,9 +75,16 @@ subspace doctor
 ## Project Structure
 
 ```
+config/terraform/
+  backend.tf                  # Backend config (chosen during project generation, default local)
+app/modules/<module>/
+  main.tf
+  variables.tf
+  outputs.tf
 app/stacks/<stack>/
   *.tf                        # Terraform/OpenTofu configuration
   backend.tf                  # Backend configuration
+  providers.tf                # Provider config generated from project backend settings
   tfvars/
     base.tfvars               # Always loaded
     <env>.tfvars              # Loaded when env is specified

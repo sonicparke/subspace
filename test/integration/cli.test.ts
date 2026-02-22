@@ -74,6 +74,63 @@ describe("CLI integration", () => {
 		expect(result.stdout).toContain("plan");
 		expect(result.stdout).toContain("apply");
 		expect(result.stdout).toContain("destroy");
+		expect(result.stdout).toContain("new");
+	});
+
+	it("new project creates scaffold", async () => {
+		const result = await run("new project demo", { cwd: tmpDir });
+		expect(result.exitCode).toBe(0);
+
+		const projectDirEntries = await readdir(join(tmpDir, "demo"));
+		expect(projectDirEntries).toContain("app");
+		expect(projectDirEntries).toContain("config");
+		expect(projectDirEntries).toContain("README.md");
+	});
+
+	it("new module and stack create scaffolds in a project", async () => {
+		await run("new project demo", { cwd: tmpDir });
+
+		const projectDir = join(tmpDir, "demo");
+		const moduleResult = await run("new module vpc", { cwd: projectDir });
+		const stackResult = await run("new stack network", { cwd: projectDir });
+		expect(moduleResult.exitCode).toBe(0);
+		expect(stackResult.exitCode).toBe(0);
+
+		const moduleMain = await readFile(
+			join(projectDir, "app/modules/vpc/main.tf"),
+			"utf-8",
+		);
+		const stackBase = await readFile(
+			join(projectDir, "app/stacks/network/tfvars/base.tfvars"),
+			"utf-8",
+		);
+		const stackProviders = await readFile(
+			join(projectDir, "app/stacks/network/providers.tf"),
+			"utf-8",
+		);
+		expect(moduleMain).toContain("Module resources");
+		expect(stackBase).toContain("Base vars");
+		expect(stackProviders).toContain('required_version = ">= 1.6.0"');
+	});
+
+	it("new project with backend and region writes region-specific templates", async () => {
+		const result = await run("new project demo s3 us-west-2", { cwd: tmpDir });
+		expect(result.exitCode).toBe(0);
+		const stackResult = await run("new stack network", { cwd: join(tmpDir, "demo") });
+		expect(stackResult.exitCode).toBe(0);
+
+		const backendTf = await readFile(
+			join(tmpDir, "demo/config/terraform/backend.tf"),
+			"utf-8",
+		);
+		const providerTf = await readFile(
+			join(tmpDir, "demo/app/stacks/network/providers.tf"),
+			"utf-8",
+		);
+		expect(backendTf).toContain('backend "s3"');
+		expect(backendTf).toContain('region = "us-west-2"');
+		expect(providerTf).toContain('provider "aws"');
+		expect(providerTf).toContain('region = "us-west-2"');
 	});
 
 	it("doctor runs successfully", async () => {

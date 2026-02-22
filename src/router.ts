@@ -5,12 +5,27 @@ import { runDoctor } from "./commands/doctor.js";
 import { runPlan } from "./commands/plan.js";
 import { runApply } from "./commands/apply.js";
 import { runDestroy } from "./commands/destroy.js";
+import { runNew } from "./commands/new.js";
 
 const t = initTRPC.context<SubspaceContext>().create();
 
 const workflowInput = z.object({
 	stack: z.string().describe("Stack name").meta({ positional: true }),
 	env: z.string().optional().describe("Environment name").meta({ positional: true }),
+});
+const newInput = z.object({
+	generator: z.enum(["project", "module", "stack"]).describe("Generator type").meta({ positional: true }),
+	name: z.string().describe("Resource name").meta({ positional: true }),
+	backend: z
+		.enum(["local", "s3", "gcs", "azurerm"])
+		.optional()
+		.describe("Project backend (project generator only)")
+		.meta({ positional: true }),
+	region: z
+		.string()
+		.optional()
+		.describe("Project region (for s3/gcs backends)")
+		.meta({ positional: true }),
 });
 
 export const router = t.router({
@@ -44,6 +59,14 @@ export const router = t.router({
 		.input(workflowInput)
 		.mutation(async ({ ctx, input }) => {
 			const code = await runDestroy(ctx, input);
+			if (code !== 0) process.exit(code);
+		}),
+
+	new: t.procedure
+		.meta({ description: "Generate project, module, or stack scaffolding" })
+		.input(newInput)
+		.mutation(async ({ ctx, input }) => {
+			const code = await runNew(ctx, input);
 			if (code !== 0) process.exit(code);
 		}),
 });
