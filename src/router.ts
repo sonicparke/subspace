@@ -16,15 +16,15 @@ const workflowInput = z.object({
 const newInput = z.object({
 	generator: z.enum(["project", "module", "stack"]).describe("Generator type").meta({ positional: true }),
 	name: z.string().describe("Resource name").meta({ positional: true }),
-	backend: z
-		.enum(["local", "s3", "gcs", "azurerm"])
-		.optional()
-		.describe("Project backend (project generator only)")
-		.meta({ positional: true }),
-	region: z
+	arg3: z
 		.string()
 		.optional()
-		.describe("Project region (for s3/gcs backends)")
+		.describe("Generator-specific third positional argument")
+		.meta({ positional: true }),
+	arg4: z
+		.string()
+		.optional()
+		.describe("Generator-specific fourth positional argument")
 		.meta({ positional: true }),
 });
 
@@ -66,7 +66,26 @@ export const router = t.router({
 		.meta({ description: "Generate project, module, or stack scaffolding" })
 		.input(newInput)
 		.mutation(async ({ ctx, input }) => {
-			const code = await runNew(ctx, input);
+			const normalized =
+				input.generator === "project"
+					? {
+						generator: input.generator,
+						name: input.name,
+						backend: input.arg3,
+						region: input.arg4,
+					}
+					: input.generator === "stack"
+						? {
+							generator: input.generator,
+							name: input.name,
+							provider: input.arg3,
+							region: input.arg4,
+						}
+						: {
+							generator: input.generator,
+							name: input.name,
+						};
+			const code = await runNew(ctx, normalized);
 			if (code !== 0) process.exit(code);
 		}),
 });

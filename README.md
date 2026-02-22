@@ -6,11 +6,11 @@ Subspace wraps OpenTofu/Terraform with convention-over-configuration project str
 
 ## Quick Start
 
-**Prerequisites:** [Bun](https://bun.sh), [pnpm](https://pnpm.io), and [OpenTofu](https://opentofu.org) or [Terraform](https://www.terraform.io).
+**Prerequisites:** [Bun](https://bun.sh), and [OpenTofu](https://opentofu.org) or [Terraform](https://www.terraform.io).
 
 ```bash
-pnpm install
-pnpm build          # produces dist/subspace
+bun install
+bun run build       # produces dist/subspace
 ```
 
 Create a stack and run your first plan:
@@ -28,7 +28,9 @@ dist/subspace plan network
 subspace plan    <stack> [env] [--engine tofu|terraform] -- <engineArgs...>
 subspace apply   <stack> [env] [--engine tofu|terraform] -- <engineArgs...>
 subspace destroy <stack> [env] [--engine tofu|terraform] -- <engineArgs...>
-subspace new     <project|module|stack> <name> [backend] [region]
+subspace new project <name> [backend] [region]
+subspace new module  <name>
+subspace new stack   <name> [provider] [region]
 subspace new                                  # interactive generator mode
 subspace doctor
 ```
@@ -62,6 +64,9 @@ subspace new project demo s3
 # Optional explicit region for s3/gcs backends
 subspace new project demo s3 us-west-2
 
+# Optional provider + region for stack scaffold
+subspace new stack network aws us-west-2
+
 # Generate a module inside a Subspace project
 subspace new module vpc
 
@@ -77,6 +82,7 @@ subspace doctor
 ```
 config/terraform/
   backend.tf                  # Backend config (chosen during project generation, default local)
+subspace.toml                 # Project policy (backend and defaults)
 app/modules/<module>/
   main.tf
   variables.tf
@@ -85,6 +91,7 @@ app/stacks/<stack>/
   *.tf                        # Terraform/OpenTofu configuration
   backend.tf                  # Backend configuration
   providers.tf                # Provider config generated from project backend settings
+  subspace.toml               # Stack policy (provider and defaults)
   tfvars/
     base.tfvars               # Always loaded
     <env>.tfvars              # Loaded when env is specified
@@ -177,10 +184,10 @@ The recommended `.gitignore` entries (included in this repo):
 ## Development
 
 ```bash
-pnpm install         # Install dependencies
-pnpm build           # Compile to dist/subspace
-pnpm test            # Run tests
-pnpm lint            # Lint with Biome
-pnpm format          # Format with Biome
-pnpm typecheck       # Type-check with tsc
+bun install          # Install dependencies
+bun run build        # Compile to dist/subspace
+bun test             # Run tests
+bun run lint         # Lint with Biome
+bun run format       # Format with Biome
+bun run typecheck    # Type-check with tsc
 ```

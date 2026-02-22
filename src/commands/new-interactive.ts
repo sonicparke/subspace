@@ -3,14 +3,19 @@ const GENERATOR_OPTIONS = [
 	"module",
 	"stack",
 ] as const;
-const VALID_GENERATORS = new Set(GENERATOR_OPTIONS);
-const VALID_NAME = /^[A-Za-z0-9_-]+$/;
 const BACKEND_OPTIONS = [
 	"local",
 	"s3",
 	"gcs",
 	"azurerm",
 ] as const;
+const PROVIDER_OPTIONS = [
+	"aws",
+	"azure",
+	"gcp",
+	"cloudflare",
+] as const;
+const VALID_NAME = /^[A-Za-z0-9_-]+$/;
 const VALID_REGION = /^[A-Za-z0-9-]+$/;
 
 export interface PromptIO {
@@ -23,10 +28,6 @@ export interface PromptIO {
 	): Promise<string>;
 }
 
-function isGenerator(value: string): value is (typeof GENERATOR_OPTIONS)[number] {
-	return VALID_GENERATORS.has(value as (typeof GENERATOR_OPTIONS)[number]);
-}
-
 export async function resolveNewArgsInteractive(
 	cliArgv: string[],
 	io: PromptIO,
@@ -35,75 +36,84 @@ export async function resolveNewArgsInteractive(
 
 	let generator = cliArgv[1];
 	let name = cliArgv[2];
-	let backend = cliArgv[3];
-	let region = cliArgv[4];
+	let arg3 = cliArgv[3];
+	let arg4 = cliArgv[4];
 
-	if (
-		generator &&
-		name &&
-		(generator !== "project" ||
-			(backend &&
-				(!backendNeedsRegion(backend as (typeof BACKEND_OPTIONS)[number]) ||
-					Boolean(region))))
-	) {
-		return cliArgv;
-	}
+	if (isComplete(generator, name, arg3, arg4)) return cliArgv;
+
 	if (!io.isTTY) {
 		if (!generator || !name) {
 			throw new Error(
 				'missing required arguments for "new". Run interactively or pass <generator> <name>.',
 			);
 		}
-		if (generator === "project" && !backend) {
-			return ["new", generator, name, "local"];
-		}
-		if (
-			generator === "project" &&
-			backend &&
-			backendNeedsRegion(backend as (typeof BACKEND_OPTIONS)[number]) &&
-			!region
-		) {
-			region = defaultRegionForBackend(
-				backend as (typeof BACKEND_OPTIONS)[number],
-			);
-		}
-		return backend
-			? region
+		if (generator === "project") {
+			const backend = arg3 ?? "local";
+			const region = backendNeedsRegion(backend)
+				? (arg4 ?? defaultRegionForBackend(backend))
+				: undefined;
+			return region
 				? ["new", generator, name, backend, region]
-				: ["new", generator, name, backend]
-			: ["new", generator, name];
+				: ["new", generator, name, backend];
+		}
+		if (generator === "stack") {
+			const provider = arg3 ?? "aws";
+			return ["new", generator, name, provider];
+		}
+		return ["new", generator, name];
 	}
 
-	if (!generator || !isGenerator(generator)) {
-		generator = await promptGenerator(io);
+	if (!generator || !GENERATOR_OPTIONS.includes(generator as never)) {
+		generator = await io.select("Select generator", GENERATOR_OPTIONS, 0);
 	}
 	if (!name || !VALID_NAME.test(name)) {
 		name = await promptName(io);
 	}
-	if (generator === "project" && !backend) {
-		backend = await promptBackend(io);
-	}
-	if (
-		generator === "project" &&
-		backend &&
-		backendNeedsRegion(backend as (typeof BACKEND_OPTIONS)[number]) &&
-		(!region || !VALID_REGION.test(region))
-	) {
-		region = await promptRegion(
-			io,
-			defaultRegionForBackend(backend as (typeof BACKEND_OPTIONS)[number]),
-		);
+
+	if (generator === "project") {
+		const backend = arg3 && BACKEND_OPTIONS.includes(arg3 as never)
+			? arg3
+			: await io.select("Select backend", BACKEND_OPTIONS, 0);
+		const region = backendNeedsRegion(backend)
+			? await promptRegion(io, defaultRegionForBackend(backend), arg4)
+			: undefined;
+		return region
+			? ["new", generator, name, backend, region]
+			: ["new", generator, name, backend];
 	}
 
-	return backend
-		? region
-			? ["new", generator, name, backend, region]
-			: ["new", generator, name, backend]
-		: ["new", generator, name];
+	if (generator === "stack") {
+		const provider = arg3 && PROVIDER_OPTIONS.includes(arg3 as never)
+			? arg3
+			: await io.select("Select provider", PROVIDER_OPTIONS, 0);
+		const region = providerNeedsRegion(provider) && !arg4
+			? await promptRegion(io, defaultRegionForProvider(provider), arg4)
+			: arg4;
+		return region
+			? ["new", generator, name, provider, region]
+			: ["new", generator, name, provider];
+	}
+
+	return ["new", generator, name];
 }
 
-async function promptGenerator(io: PromptIO): Promise<string> {
-	return io.select("Select generator", GENERATOR_OPTIONS, 0);
+function isComplete(
+	generator: string | undefined,
+	name: string | undefined,
+	arg3: string | undefined,
+	arg4: string | undefined,
+): boolean {
+	if (!generator || !name) return false;
+	if (generator === "project") {
+		if (!arg3) return false;
+		if (backendNeedsRegion(arg3) && !arg4) return false;
+		return true;
+	}
+	if (generator === "stack") {
+		if (!arg3) return false;
+		return true;
+	}
+	return true;
 }
 
 async function promptName(io: PromptIO): Promise<string> {
@@ -113,11 +123,12 @@ async function promptName(io: PromptIO): Promise<string> {
 	}
 }
 
-async function promptBackend(io: PromptIO): Promise<string> {
-	return io.select("Select backend", BACKEND_OPTIONS, 0);
-}
-
-async function promptRegion(io: PromptIO, fallback: string): Promise<string> {
+async function promptRegion(
+	io: PromptIO,
+	fallback: string,
+	initial: string | undefined,
+): Promise<string> {
+	if (initial && VALID_REGION.test(initial)) return initial;
 	while (true) {
 		const value = (await io.ask(
 			`\x1b[36mRegion\x1b[0m [${fallback}]: `,
@@ -127,14 +138,18 @@ async function promptRegion(io: PromptIO, fallback: string): Promise<string> {
 	}
 }
 
-function backendNeedsRegion(
-	backend: (typeof BACKEND_OPTIONS)[number],
-): boolean {
+function backendNeedsRegion(backend: string): boolean {
 	return backend === "s3" || backend === "gcs";
 }
 
-function defaultRegionForBackend(
-	backend: (typeof BACKEND_OPTIONS)[number],
-): string {
+function providerNeedsRegion(provider: string): boolean {
+	return provider === "aws" || provider === "gcp";
+}
+
+function defaultRegionForBackend(backend: string): string {
 	return backend === "s3" ? "us-east-1" : "us-central1";
+}
+
+function defaultRegionForProvider(provider: string): string {
+	return provider === "aws" ? "us-east-1" : "us-central1";
 }
