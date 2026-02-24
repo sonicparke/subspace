@@ -24,12 +24,13 @@ export async function invokeEngine(
 	command: string,
 	stack: string,
 	env: string,
+	region: string,
 ): Promise<number> {
 	const terraformDirExists = await ctx.fs.exists(`${buildDir}/.terraform`);
 
 	if (!terraformDirExists) {
 		ctx.log.info("Running init (no .terraform directory found)...");
-		const initResult = await runInit(ctx, buildDir, stack, env);
+		const initResult = await runInit(ctx, buildDir, stack, env, region);
 		if (initResult !== 0) return initResult;
 	}
 
@@ -38,7 +39,7 @@ export async function invokeEngine(
 
 	if (result.exitCode !== 0 && isInitRequired(result.stderr)) {
 		ctx.log.info("Init required, running init...");
-		const initResult = await runInit(ctx, buildDir, stack, env);
+		const initResult = await runInit(ctx, buildDir, stack, env, region);
 		if (initResult !== 0) return initResult;
 		const retry = await runEngineCommand(ctx, buildDir, command);
 		return retry.exitCode;
@@ -52,9 +53,10 @@ async function runInit(
 	buildDir: string,
 	stack: string,
 	env: string,
+	region: string,
 ): Promise<number> {
 	const backend = await detectBackend(ctx, buildDir);
-	const configFlags = backendConfigFlags(backend, stack, env);
+	const configFlags = backendConfigFlags(backend, stack, env, region);
 	const args = [
 		`-chdir=${buildDir}`,
 		"init",

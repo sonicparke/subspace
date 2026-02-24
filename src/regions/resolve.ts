@@ -10,11 +10,11 @@ export function resolveTargetRegions(input: ResolveRegionsInput): string[] {
 	if (input.regionFlag) return [input.regionFlag];
 
 	const configured = input.stackConfig.regions.values;
-	if (input.allRegions) return configured;
+	if (input.allRegions && configured.length > 0) return configured;
 
 	if (configured.length > 0) return configured;
 	if (input.stackConfig.regions.default) return [input.stackConfig.regions.default];
-	return [];
+	return ["global"];
 }
 
 export function validateRegions(regions: string[]): string[] {

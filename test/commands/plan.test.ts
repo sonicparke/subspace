@@ -26,8 +26,8 @@ describe("runPlan", () => {
 
 		expect(code).toBe(0);
 		// Build dir should have main.tf and auto.tfvars
-		expect(ctx.files[".subspace/build/mystack/prod/main.tf"]).toBe("resource {}");
-		expect(ctx.files[".subspace/build/mystack/prod/00-base.auto.tfvars"]).toBe("x = 1");
+		expect(ctx.files[".subspace/build/mystack/global/prod/main.tf"]).toBe("resource {}");
+		expect(ctx.files[".subspace/build/mystack/global/prod/00-base.auto.tfvars"]).toBe("x = 1");
 		// Engine should be invoked with plan command
 		expect(ctx.streamCalls.some((c) => c.args.includes("plan"))).toBe(true);
 	});
@@ -43,6 +43,8 @@ describe("runPlan", () => {
 
 		await runPlan(ctx, { stack: "mystack" });
 
-		expect(ctx.files[".subspace/build/mystack/__noenv__/main.tf"]).toBe("resource {}");
+		expect(ctx.files[".subspace/build/mystack/global/__noenv__/main.tf"]).toBe(
+			"resource {}",
+		);
 	});
 });

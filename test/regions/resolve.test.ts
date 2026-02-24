@@ -31,6 +31,11 @@ describe("resolveTargetRegions", () => {
 		const cfg = { ...stackConfig, regions: { values: [], default: "us-east-1" } };
 		expect(resolveTargetRegions({ stackConfig: cfg })).toEqual(["us-east-1"]);
 	});
+
+	it("falls back to global when no regions are configured", () => {
+		const cfg = { ...stackConfig, regions: { values: [], default: undefined } };
+		expect(resolveTargetRegions({ stackConfig: cfg })).toEqual(["global"]);
+	});
 });
 
 describe("validateRegions", () => {

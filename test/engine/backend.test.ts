@@ -128,36 +128,36 @@ terraform {
 
 describe("backendConfigFlags", () => {
 	it("generates s3 key flag", () => {
-		const flags = backendConfigFlags("s3", "mystack", "prod");
+		const flags = backendConfigFlags("s3", "mystack", "prod", "us-east-1");
 		expect(flags).toEqual([
-			"-backend-config=key=subspace/mystack/prod/terraform.tfstate",
+			"-backend-config=key=subspace/mystack/us-east-1/prod/terraform.tfstate",
 		]);
 	});
 
 	it("generates gcs prefix flag", () => {
-		const flags = backendConfigFlags("gcs", "mystack", "prod");
-		expect(flags).toEqual(["-backend-config=prefix=subspace/mystack/prod"]);
+		const flags = backendConfigFlags("gcs", "mystack", "prod", "us-west-2");
+		expect(flags).toEqual(["-backend-config=prefix=subspace/mystack/us-west-2/prod"]);
 	});
 
 	it("generates azurerm key flag", () => {
-		const flags = backendConfigFlags("azurerm", "mystack", "staging");
+		const flags = backendConfigFlags("azurerm", "mystack", "staging", "global");
 		expect(flags).toEqual([
-			"-backend-config=key=subspace/mystack/staging/terraform.tfstate",
+			"-backend-config=key=subspace/mystack/global/staging/terraform.tfstate",
 		]);
 	});
 
 	it("uses __noenv__ when env is empty", () => {
-		const flags = backendConfigFlags("s3", "mystack", "");
+		const flags = backendConfigFlags("s3", "mystack", "", "us-east-1");
 		expect(flags).toEqual([
-			"-backend-config=key=subspace/mystack/__noenv__/terraform.tfstate",
+			"-backend-config=key=subspace/mystack/us-east-1/__noenv__/terraform.tfstate",
 		]);
 	});
 
 	it("returns empty for local backend", () => {
-		expect(backendConfigFlags("local", "mystack", "prod")).toEqual([]);
+		expect(backendConfigFlags("local", "mystack", "prod", "global")).toEqual([]);
 	});
 
 	it("returns empty for null backend", () => {
-		expect(backendConfigFlags(null, "mystack", "prod")).toEqual([]);
+		expect(backendConfigFlags(null, "mystack", "prod", "global")).toEqual([]);
 	});
 });

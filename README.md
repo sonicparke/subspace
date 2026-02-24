@@ -4,6 +4,23 @@ Terraspace-style CLI for OpenTofu and Terraform.
 
 Subspace wraps OpenTofu/Terraform with convention-over-configuration project structure, automatic variable layering, and per-environment state isolation. It compiles to a single binary via Bun.
 
+## Features
+
+- **CLI workflows:** `plan`, `apply`, `destroy`, `doctor`
+- **Interactive generators:**
+  - `new project` (backend + optional region)
+  - `new module`
+  - `new stack` (provider + optional region)
+  - keyboard-navigable TUI for choice selection
+- **Provider support (stack-level):** `aws`, `azure`, `gcp`, `cloudflare`
+- **Backend support (project-level defaults):** `local`, `s3`, `gcs`, `azurerm`
+- **Config scaffolding:** project `subspace.toml`, stack `subspace.toml`, generated `providers.tf`, and backend templates
+- **Variable layering:** base, environment, local, and secret/local overlays
+- **Engine selection:** `--engine`, `SUBSPACE_ENGINE`, and auto-detect (`tofu` then `terraform`)
+- **Regionalized build layout:** `.subspace/build/<stack>/<region>/<env-or-noenv>/`
+- **State key isolation:** remote backend state paths include stack, region, and environment
+- **Init-when-needed workflow:** auto-runs `init` when required and retries once on init-required failures
+
 ## Quick Start
 
 **Prerequisites:** [Bun](https://bun.sh), and [OpenTofu](https://opentofu.org) or [Terraform](https://www.terraform.io).
@@ -167,7 +184,7 @@ Run `subspace doctor` to see which engine is active.
 
 ## Build Directory
 
-Subspace uses `.subspace/build/<stack>/<env>/` as the working directory for engine commands. On every invocation it performs a clean rebuild: all files are deleted **except** `.terraform/`, `.terraform.lock.hcl`, `terraform.tfstate`, and `terraform.tfstate.backup`, then stack source files are re-copied.
+Subspace uses `.subspace/build/<stack>/<region>/<env>/` as the working directory for engine commands. On every invocation it performs a clean rebuild: all files are deleted **except** `.terraform/`, `.terraform.lock.hcl`, `terraform.tfstate`, and `terraform.tfstate.backup`, then stack source files are re-copied.
 
 You should never need to interact with this directory directly.
 

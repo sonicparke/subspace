@@ -162,7 +162,7 @@ describe("CLI integration", () => {
 		await run("plan teststack", { cwd: tmpDir });
 
 		// Check build dir was created
-		const buildDir = join(tmpDir, ".subspace/build/teststack/__noenv__");
+		const buildDir = join(tmpDir, ".subspace/build/teststack/global/__noenv__");
 		const entries = await readdir(buildDir);
 		expect(entries).toContain("main.tf");
 		expect(entries).toContain("00-base.auto.tfvars");
@@ -182,7 +182,7 @@ describe("CLI integration", () => {
 
 		await run("plan mystack prod", { cwd: tmpDir });
 
-		const buildDir = join(tmpDir, ".subspace/build/mystack/prod");
+		const buildDir = join(tmpDir, ".subspace/build/mystack/global/prod");
 		const entries = await readdir(buildDir);
 		expect(entries).toContain("main.tf");
 		expect(entries).toContain("00-base.auto.tfvars");

@@ -68,14 +68,16 @@ export function backendConfigFlags(
 	backend: BackendType,
 	stack: string,
 	env: string,
+	region: string,
 ): string[] {
 	const envKey = env || "__noenv__";
+	const regionKey = region || "__noregion__";
 	switch (backend) {
 		case "s3":
 		case "azurerm":
-			return [`-backend-config=key=subspace/${stack}/${envKey}/terraform.tfstate`];
+			return [`-backend-config=key=subspace/${stack}/${regionKey}/${envKey}/terraform.tfstate`];
 		case "gcs":
-			return [`-backend-config=prefix=subspace/${stack}/${envKey}`];
+			return [`-backend-config=prefix=subspace/${stack}/${regionKey}/${envKey}`];
 		case "local":
 		case null:
 			return [];

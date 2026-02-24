@@ -12,7 +12,14 @@ describe("invokeEngine", () => {
 			streamHandler: () => 0,
 		});
 
-		const code = await invokeEngine(ctx, "build", "plan", "mystack", "prod");
+		const code = await invokeEngine(
+			ctx,
+			"build",
+			"plan",
+			"mystack",
+			"prod",
+			"us-east-1",
+		);
 
 		expect(code).toBe(0);
 		// Should have run init then plan
@@ -31,7 +38,14 @@ describe("invokeEngine", () => {
 			streamHandler: () => 0,
 		});
 
-		const code = await invokeEngine(ctx, "build", "plan", "mystack", "prod");
+		const code = await invokeEngine(
+			ctx,
+			"build",
+			"plan",
+			"mystack",
+			"prod",
+			"us-east-1",
+		);
 
 		expect(code).toBe(0);
 		// Should have run only plan
@@ -48,7 +62,7 @@ describe("invokeEngine", () => {
 			streamHandler: () => 0,
 		});
 
-		await invokeEngine(ctx, "build", "apply", "mystack", "prod");
+		await invokeEngine(ctx, "build", "apply", "mystack", "prod", "us-east-1");
 
 		expect(ctx.streamCalls[0].args[0]).toBe("-chdir=build");
 	});
@@ -63,7 +77,7 @@ describe("invokeEngine", () => {
 			streamHandler: () => 0,
 		});
 
-		await invokeEngine(ctx, "build", "plan", "mystack", "prod");
+		await invokeEngine(ctx, "build", "plan", "mystack", "prod", "us-east-1");
 
 		expect(ctx.streamCalls[0].args).toContain("-target=module.foo");
 	});
@@ -77,7 +91,14 @@ describe("invokeEngine", () => {
 			streamHandler: () => 1,
 		});
 
-		const code = await invokeEngine(ctx, "build", "plan", "mystack", "prod");
+		const code = await invokeEngine(
+			ctx,
+			"build",
+			"plan",
+			"mystack",
+			"prod",
+			"us-east-1",
+		);
 		expect(code).toBe(1);
 	});
 
@@ -99,7 +120,14 @@ describe("invokeEngine", () => {
 			},
 		});
 
-		const code = await invokeEngine(ctx, "build", "plan", "mystack", "prod");
+		const code = await invokeEngine(
+			ctx,
+			"build",
+			"plan",
+			"mystack",
+			"prod",
+			"us-east-1",
+		);
 
 		expect(code).toBe(0);
 		// Should have: plan (fail) -> init -> plan (success)
@@ -116,12 +144,12 @@ describe("invokeEngine", () => {
 			streamHandler: () => 0,
 		});
 
-		await invokeEngine(ctx, "build", "plan", "mystack", "prod");
+		await invokeEngine(ctx, "build", "plan", "mystack", "prod", "us-east-1");
 
 		const initCall = ctx.streamCalls[0];
 		expect(initCall.args).toContain("init");
 		expect(initCall.args).toContain(
-			"-backend-config=key=subspace/mystack/prod/terraform.tfstate",
+			"-backend-config=key=subspace/mystack/us-east-1/prod/terraform.tfstate",
 		);
 	});
 });
