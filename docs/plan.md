@@ -124,11 +124,16 @@ Subspace supports configuring the Terraform/OpenTofu backend via `app/stacks/<st
 
 Terraform and OpenTofu do not allow variables in `backend` blocks, so Subspace automatically injects the state key during `init` using `-backend-config`. This ensures state isolation across stacks and environments without requiring per-env backend files.
 
-During `init`, Subspace passes:
+During `init`, Subspace passes backend config derived from the app name (cwd basename), stack, region, and env:
 
-- **S3**: `-backend-config=key=subspace/<stack>/<env>/terraform.tfstate`
-- **GCS**: `-backend-config=prefix=subspace/<stack>/<env>`
-- **azurerm**: `-backend-config=key=subspace/<stack>/<env>/terraform.tfstate`
+- **S3**:
+  - `-backend-config=bucket=<app>-subspace-aws-state`
+  - `-backend-config=key=subspace/aws/<region>/<env>/<stack>/subspace.tfstate`
+- **GCS**:
+  - `-backend-config=bucket=<app>-subspace-gcp-state`
+  - `-backend-config=prefix=subspace/gcp/<region>/<env>/<stack>`
+- **azurerm**:
+  - `-backend-config=key=subspace/azure/<region>/<env>/<stack>/subspace.tfstate`
 
 When `ENV` is omitted, `<env>` is replaced with `__noenv__`.
 
@@ -159,7 +164,10 @@ terraform {
 }
 ```
 
-Subspace injects: `-backend-config=key=subspace/<stack>/<env>/terraform.tfstate`
+Subspace injects:
+
+- `-backend-config=bucket=<app>-subspace-aws-state`
+- `-backend-config=key=subspace/aws/<region>/<env>/<stack>/subspace.tfstate`
 
 **GCS (Google Cloud)**:
 
@@ -171,7 +179,10 @@ terraform {
 }
 ```
 
-Subspace injects: `-backend-config=prefix=subspace/<stack>/<env>`
+Subspace injects:
+
+- `-backend-config=bucket=<app>-subspace-gcp-state`
+- `-backend-config=prefix=subspace/gcp/<region>/<env>/<stack>`
 
 **Azure Blob Storage (`azurerm`)**:
 
@@ -185,7 +196,7 @@ terraform {
 }
 ```
 
-Subspace injects: `-backend-config=key=subspace/<stack>/<env>/terraform.tfstate`
+Subspace injects: `-backend-config=key=subspace/azure/<region>/<env>/<stack>/subspace.tfstate`
 
 ### Re-init on Backend Changes
 

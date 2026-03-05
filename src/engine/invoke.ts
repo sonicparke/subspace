@@ -1,5 +1,5 @@
 import type { SubspaceContext } from "../context.js";
-import { detectBackend, backendConfigFlags } from "./backend.js";
+import { backendConfigFlags, detectBackend } from "./backend.js";
 
 const INIT_REQUIRED_PATTERNS = [
 	/terraform init/i,
@@ -56,14 +56,22 @@ async function runInit(
 	region: string,
 ): Promise<number> {
 	const backend = await detectBackend(ctx, buildDir);
-	const configFlags = backendConfigFlags(backend, stack, env, region);
-	const args = [
-		`-chdir=${buildDir}`,
-		"init",
-		...configFlags,
-	];
+	const configFlags = backendConfigFlags(
+		backend,
+		stack,
+		env,
+		region,
+		appNameFromCwd(ctx.cwd),
+	);
+	const args = [`-chdir=${buildDir}`, "init", ...configFlags];
 	const result = await ctx.execStream(ctx.engine, args);
 	return result.exitCode;
+}
+
+function appNameFromCwd(cwd: string): string {
+	const parts = cwd.split(/[/\\]/).filter(Boolean);
+	const app = parts.at(-1) ?? "subspace";
+	return app;
 }
 
 async function runEngineCommand(
@@ -71,11 +79,7 @@ async function runEngineCommand(
 	buildDir: string,
 	command: string,
 ): Promise<{ exitCode: number; stderr: string }> {
-	const args = [
-		`-chdir=${buildDir}`,
-		command,
-		...ctx.engineArgs,
-	];
+	const args = [`-chdir=${buildDir}`, command, ...ctx.engineArgs];
 	return ctx.execStream(ctx.engine, args);
 }
 

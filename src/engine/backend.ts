@@ -69,17 +69,56 @@ export function backendConfigFlags(
 	stack: string,
 	env: string,
 	region: string,
+	appName: string,
 ): string[] {
 	const envKey = env || "__noenv__";
 	const regionKey = region || "__noregion__";
+	const backendScope = backendScopeForPath(backend);
+	const statePath = `subspace/${backendScope}/${regionKey}/${envKey}/${stack}/subspace.tfstate`;
 	switch (backend) {
 		case "s3":
-		case "azurerm":
-			return [`-backend-config=key=subspace/${stack}/${regionKey}/${envKey}/terraform.tfstate`];
+			return [
+				`-backend-config=bucket=${buildStateBucketName(appName, backendScope)}`,
+				`-backend-config=key=${statePath}`,
+			];
 		case "gcs":
-			return [`-backend-config=prefix=subspace/${stack}/${regionKey}/${envKey}`];
+			return [
+				`-backend-config=bucket=${buildStateBucketName(appName, backendScope)}`,
+				`-backend-config=prefix=${statePath.replace(/\/subspace\.tfstate$/, "")}`,
+			];
+		case "azurerm":
+			return [`-backend-config=key=${statePath}`];
 		case "local":
 		case null:
 			return [];
 	}
+}
+
+function backendScopeForPath(backend: BackendType): string {
+	switch (backend) {
+		case "s3":
+			return "aws";
+		case "gcs":
+			return "gcp";
+		case "azurerm":
+			return "azure";
+		case "local":
+		case null:
+			return "local";
+	}
+}
+
+function buildStateBucketName(appName: string, backendScope: string): string {
+	const normalizedApp = normalizeBucketPart(appName) || "subspace";
+	const normalizedScope = normalizeBucketPart(backendScope) || "state";
+	const value = `${normalizedApp}-subspace-${normalizedScope}-state`;
+	return value.slice(0, 63).replace(/-+$/, "");
+}
+
+function normalizeBucketPart(value: string): string {
+	return value
+		.toLowerCase()
+		.replace(/[^a-z0-9-]/g, "-")
+		.replace(/-+/g, "-")
+		.replace(/^-+|-+$/g, "");
 }

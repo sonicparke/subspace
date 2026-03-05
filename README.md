@@ -133,7 +133,12 @@ Missing files are silently skipped.
 
 ## Backend Configuration
 
-Subspace auto-injects `-backend-config` during `init` to isolate state per stack and environment. The state key follows the pattern `subspace/<stack>/<env>/terraform.tfstate`.
+Subspace auto-injects `-backend-config` during `init` to isolate state per stack, region, and environment.
+
+For remote backends, Subspace now derives a state bucket from the app directory name and backend scope (for example `demo-app-subspace-aws-state`) and injects state paths in this shape:
+
+- `subspace/<scope>/<region>/<env>/<stack>/subspace.tfstate`
+- scopes: `aws` (S3), `gcp` (GCS), `azure` (azurerm)
 
 Write your `backend.tf` as usual -- Subspace handles the key/prefix automatically:
 
@@ -143,7 +148,8 @@ terraform {
   backend "s3" {
     bucket = "my-tfstate"
     region = "us-east-1"
-    # key is injected by Subspace: subspace/<stack>/<env>/terraform.tfstate
+    # bucket is injected by Subspace: <app>-subspace-aws-state
+    # key is injected by Subspace: subspace/aws/<region>/<env>/<stack>/subspace.tfstate
   }
 }
 ```
@@ -153,7 +159,8 @@ terraform {
 terraform {
   backend "gcs" {
     bucket = "my-tfstate"
-    # prefix is injected by Subspace: subspace/<stack>/<env>
+    # bucket is injected by Subspace: <app>-subspace-gcp-state
+    # prefix is injected by Subspace: subspace/gcp/<region>/<env>/<stack>
   }
 }
 ```
@@ -165,7 +172,7 @@ terraform {
     resource_group_name  = "tfstate"
     storage_account_name = "tfstate"
     container_name       = "tfstate"
-    # key is injected by Subspace: subspace/<stack>/<env>/terraform.tfstate
+    # key is injected by Subspace: subspace/azure/<region>/<env>/<stack>/subspace.tfstate
   }
 }
 ```

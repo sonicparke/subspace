@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { detectBackend, backendConfigFlags } from "../../src/engine/backend.js";
+import { describe, expect, it } from "vitest";
+import { backendConfigFlags, detectBackend } from "../../src/engine/backend.js";
 import { createMockContext } from "../helpers/mock-context.js";
 
 describe("detectBackend", () => {
@@ -128,36 +128,69 @@ terraform {
 
 describe("backendConfigFlags", () => {
 	it("generates s3 key flag", () => {
-		const flags = backendConfigFlags("s3", "mystack", "prod", "us-east-1");
+		const flags = backendConfigFlags(
+			"s3",
+			"mystack",
+			"prod",
+			"us-east-1",
+			"demo-app",
+		);
 		expect(flags).toEqual([
-			"-backend-config=key=subspace/mystack/us-east-1/prod/terraform.tfstate",
+			"-backend-config=bucket=demo-app-subspace-aws-state",
+			"-backend-config=key=subspace/aws/us-east-1/prod/mystack/subspace.tfstate",
 		]);
 	});
 
 	it("generates gcs prefix flag", () => {
-		const flags = backendConfigFlags("gcs", "mystack", "prod", "us-west-2");
-		expect(flags).toEqual(["-backend-config=prefix=subspace/mystack/us-west-2/prod"]);
+		const flags = backendConfigFlags(
+			"gcs",
+			"mystack",
+			"prod",
+			"us-west-2",
+			"demo-app",
+		);
+		expect(flags).toEqual([
+			"-backend-config=bucket=demo-app-subspace-gcp-state",
+			"-backend-config=prefix=subspace/gcp/us-west-2/prod/mystack",
+		]);
 	});
 
 	it("generates azurerm key flag", () => {
-		const flags = backendConfigFlags("azurerm", "mystack", "staging", "global");
+		const flags = backendConfigFlags(
+			"azurerm",
+			"mystack",
+			"staging",
+			"global",
+			"demo-app",
+		);
 		expect(flags).toEqual([
-			"-backend-config=key=subspace/mystack/global/staging/terraform.tfstate",
+			"-backend-config=key=subspace/azure/global/staging/mystack/subspace.tfstate",
 		]);
 	});
 
 	it("uses __noenv__ when env is empty", () => {
-		const flags = backendConfigFlags("s3", "mystack", "", "us-east-1");
+		const flags = backendConfigFlags(
+			"s3",
+			"mystack",
+			"",
+			"us-east-1",
+			"demo-app",
+		);
 		expect(flags).toEqual([
-			"-backend-config=key=subspace/mystack/us-east-1/__noenv__/terraform.tfstate",
+			"-backend-config=bucket=demo-app-subspace-aws-state",
+			"-backend-config=key=subspace/aws/us-east-1/__noenv__/mystack/subspace.tfstate",
 		]);
 	});
 
 	it("returns empty for local backend", () => {
-		expect(backendConfigFlags("local", "mystack", "prod", "global")).toEqual([]);
+		expect(
+			backendConfigFlags("local", "mystack", "prod", "global", "demo-app"),
+		).toEqual([]);
 	});
 
 	it("returns empty for null backend", () => {
-		expect(backendConfigFlags(null, "mystack", "prod", "global")).toEqual([]);
+		expect(
+			backendConfigFlags(null, "mystack", "prod", "global", "demo-app"),
+		).toEqual([]);
 	});
 });

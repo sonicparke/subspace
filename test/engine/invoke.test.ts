@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { invokeEngine } from "../../src/engine/invoke.js";
 import { createMockContext } from "../helpers/mock-context.js";
 
@@ -138,8 +138,10 @@ describe("invokeEngine", () => {
 	it("auto-injects backend config during init for s3", async () => {
 		const ctx = createMockContext({
 			engine: "tofu",
+			cwd: "/workspace/demo-app",
 			files: {
-				"build/backend.tf": 'terraform {\n  backend "s3" {\n    bucket = "b"\n  }\n}',
+				"build/backend.tf":
+					'terraform {\n  backend "s3" {\n    bucket = "b"\n  }\n}',
 			},
 			streamHandler: () => 0,
 		});
@@ -149,7 +151,10 @@ describe("invokeEngine", () => {
 		const initCall = ctx.streamCalls[0];
 		expect(initCall.args).toContain("init");
 		expect(initCall.args).toContain(
-			"-backend-config=key=subspace/mystack/us-east-1/prod/terraform.tfstate",
+			"-backend-config=bucket=demo-app-subspace-aws-state",
+		);
+		expect(initCall.args).toContain(
+			"-backend-config=key=subspace/aws/us-east-1/prod/mystack/subspace.tfstate",
 		);
 	});
 });
