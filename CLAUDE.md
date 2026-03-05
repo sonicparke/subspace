@@ -26,7 +26,11 @@ pnpm lint              # Biome lint
 pnpm format            # Biome format
 ```
 
-## Architecture
+## Primary Workflows
+
+- **Feature Completion:** Always run `pnpm build` after completing a feature to compile and install the binary to `/opt/homebrew/bin/subspace`.
+- **Testing:** Verify changes with `pnpm test` before building.
+
 
 Subspace is implemented as a **tRPC router** where each procedure maps to a CLI command.
 
