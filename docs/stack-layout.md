@@ -21,13 +21,13 @@ app/stacks/<stack>/tfvars/
 Subspace always runs OpenTofu/Terraform from an emitted directory:
 
 ```
-.subspace/build/<stack>/<env-or-noenv>/
+.subspace/build/<stack>/<region>/<env-or-noenv>/
 ```
 
 If `ENV` is omitted, Subspace uses the sentinel directory:
 
 ```
-.subspace/build/<stack>/__noenv__/
+.subspace/build/<stack>/<region>/__noenv__/
 ```
 
 Subspace performs a clean rebuild of the emitted directory on each command invocation.
@@ -82,8 +82,8 @@ Notes:
 Subspace runs the engine with `-chdir`:
 
 ```bash
-tofu -chdir=.subspace/build/<stack>/<env-or-noenv> plan
-terraform -chdir=.subspace/build/<stack>/<env-or-noenv> apply
+tofu -chdir=.subspace/build/<stack>/<region>/<env-or-noenv> plan
+terraform -chdir=.subspace/build/<stack>/<region>/<env-or-noenv> apply
 ```
 
 Engine-specific args are always passed after `--` at the Subspace CLI level.

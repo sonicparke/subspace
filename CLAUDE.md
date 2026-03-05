@@ -78,7 +78,7 @@ app/stacks/<stack>/            # Stack source (Terraform/OpenTofu files)
     local.tfvars
     <env>.local.tfvars
 
-.subspace/build/<stack>/<env>/ # Emitted working directory (clean rebuild each run)
+.subspace/build/<stack>/<region>/<env>/ # Emitted working directory (clean rebuild each run)
   00-base.auto.tfvars          # Layered var files written by Subspace
   10-env.auto.tfvars
   20-env-secrets.auto.tfvars
@@ -92,7 +92,7 @@ When `ENV` is omitted, the sentinel directory name `__noenv__` is used.
 
 ## Backend Configuration
 
-Subspace copies the user's `backend.tf` from the stack source. During `init`, Subspace auto-injects `-backend-config` to set the state key to `subspace/<stack>/<env>/terraform.tfstate` (or `prefix` for GCS), ensuring state isolation without requiring per-env backend files.
+Subspace copies the user's `backend.tf` from the stack source. During `init`, Subspace auto-injects `-backend-config` to set the state key to `subspace/<scope>/<region>/<env>/<stack>/subspace.tfstate` (or `prefix` for GCS), ensuring state isolation without requiring per-env backend files.
 
 Supported backends: local, S3, GCS, azurerm.
 
@@ -100,7 +100,7 @@ Supported backends: local, S3, GCS, azurerm.
 
 Uses `-chdir` (supported by both engines):
 ```bash
-tofu -chdir=.subspace/build/<stack>/<env-or-noenv> plan
+tofu -chdir=.subspace/build/<stack>/<region>/<env-or-noenv> plan
 ```
 
 **Init-only-when-needed** for `plan`/`apply`/`destroy`:
