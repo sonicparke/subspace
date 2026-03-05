@@ -1,3 +1,8 @@
+import {
+	loadProjectConfig,
+	serializeProjectConfig,
+} from "../config/project.js";
+import { saveStackConfig } from "../config/stack.js";
 import type { SubspaceContext } from "../context.js";
 import {
 	type BackendType,
@@ -5,24 +10,17 @@ import {
 	renderBackendTf,
 } from "../domain/backends.js";
 import {
-	type ProviderType,
 	defaultProviderSettings,
+	type ProviderType,
 	recommendedBackendForProvider,
 	recommendedProviderForBackend,
 	renderProviderTf,
 } from "../domain/providers.js";
-import { loadProjectConfig, serializeProjectConfig } from "../config/project.js";
-import { saveStackConfig } from "../config/stack.js";
 
 type GeneratorKind = "project" | "module" | "stack";
 
 const VALID_NAME = /^[A-Za-z0-9_-]+$/;
-const VALID_BACKENDS = new Set<BackendType>([
-	"local",
-	"s3",
-	"gcs",
-	"azurerm",
-]);
+const VALID_BACKENDS = new Set<BackendType>(["local", "s3", "gcs", "azurerm"]);
 const VALID_PROVIDERS = new Set<ProviderType>([
 	"aws",
 	"azure",
@@ -38,20 +36,23 @@ interface NewInput {
 	region?: string;
 }
 
-export async function runNew(ctx: SubspaceContext, input: NewInput): Promise<number> {
+export async function runNew(
+	ctx: SubspaceContext,
+	input: NewInput,
+): Promise<number> {
 	if (!VALID_NAME.test(input.name)) {
 		ctx.log.error(
 			`invalid name "${input.name}". Use letters, numbers, hyphens, or underscores.`,
 		);
 		return 1;
 	}
-	if (input.backend && !VALID_BACKENDS.has(input.backend)) {
+	if (input.backend && !VALID_BACKENDS.has(input.backend as BackendType)) {
 		ctx.log.error(
 			`invalid backend "${input.backend}". Use local, s3, gcs, or azurerm.`,
 		);
 		return 1;
 	}
-	if (input.provider && !VALID_PROVIDERS.has(input.provider)) {
+	if (input.provider && !VALID_PROVIDERS.has(input.provider as ProviderType)) {
 		ctx.log.error(
 			`invalid provider "${input.provider}". Use aws, azure, gcp, or cloudflare.`,
 		);
@@ -119,7 +120,9 @@ async function generateModule(
 	name: string,
 ): Promise<number> {
 	if (!(await ctx.fs.exists("app/modules"))) {
-		ctx.log.error('app/modules/ not found. Run this inside a Subspace project.');
+		ctx.log.error(
+			"app/modules/ not found. Run this inside a Subspace project.",
+		);
 		return 1;
 	}
 
@@ -150,7 +153,7 @@ async function generateStack(
 	regionOverride: string | undefined,
 ): Promise<number> {
 	if (!(await ctx.fs.exists("app/stacks"))) {
-		ctx.log.error('app/stacks/ not found. Run this inside a Subspace project.');
+		ctx.log.error("app/stacks/ not found. Run this inside a Subspace project.");
 		return 1;
 	}
 
@@ -160,16 +163,17 @@ async function generateStack(
 		return 1;
 	}
 
+	const loadedConfig = await loadProjectConfig(ctx);
 	const projectConfig =
-		(await loadProjectConfig(ctx)) ??
+		loadedConfig ??
 		(await inferProjectConfigFromLegacyFiles(ctx).then((inferred) => ({
 			project: { backend: inferred.backend },
 			backend: { region: inferred.region },
 		})));
-	const backend = projectConfig.project.backend;
+	const backend = projectConfig!.project.backend;
 	const provider = providerOverride ?? recommendedProviderForBackend(backend);
 	const providerSettings = defaultProviderSettings(provider, {
-		region: regionOverride ?? projectConfig.backend.region,
+		region: regionOverride ?? projectConfig!.backend.region,
 	});
 	const recommendedBackend = recommendedBackendForProvider(provider);
 	if (recommendedBackend !== backend) {
@@ -182,10 +186,10 @@ async function generateStack(
 	await writeFiles(ctx, {
 		[`${stackDir}/main.tf`]: `# Stack resources
 `,
-		[`${stackDir}/backend.tf`]: `terraform {
-  backend "local" {}
-}
-`,
+		[`${stackDir}/backend.tf`]: renderBackendTf(
+			backend,
+			projectConfig!.backend,
+		),
 		[`${stackDir}/providers.tf`]: renderProviderTf(provider, providerSettings),
 		[`${stackDir}/tfvars/base.tfvars`]: `# Base vars
 `,
