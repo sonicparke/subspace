@@ -1,9 +1,10 @@
-import type { BackendType, BackendSettings } from "../domain/backends.js";
-import type { ProviderType, ProviderSettings } from "../domain/providers.js";
+import type { BackendSettings, BackendType } from "../domain/backends.js";
+import type { ProviderSettings, ProviderType } from "../domain/providers.js";
 
 export interface ProjectConfig {
 	project: {
 		backend: BackendType;
+		provider?: ProviderType;
 	};
 	backend: BackendSettings;
 	policy?: {

@@ -1,20 +1,12 @@
-const GENERATOR_OPTIONS = [
-	"project",
-	"module",
-	"stack",
-] as const;
-const BACKEND_OPTIONS = [
-	"local",
-	"s3",
-	"gcs",
-	"azurerm",
-] as const;
-const PROVIDER_OPTIONS = [
-	"aws",
-	"azure",
-	"gcp",
-	"cloudflare",
-] as const;
+import type { BackendType } from "../domain/backends.js";
+import {
+	type ProviderType,
+	recommendedProviderForBackend,
+} from "../domain/providers.js";
+
+const GENERATOR_OPTIONS = ["project", "module", "stack"] as const;
+const BACKEND_OPTIONS = ["local", "s3", "gcs", "azurerm"] as const;
+const PROVIDER_OPTIONS = ["aws", "azure", "gcp", "cloudflare"] as const;
 const VALID_NAME = /^[A-Za-z0-9_-]+$/;
 const VALID_REGION = /^[A-Za-z0-9-]+$/;
 
@@ -36,10 +28,11 @@ export async function resolveNewArgsInteractive(
 
 	let generator = cliArgv[1];
 	let name = cliArgv[2];
-	let arg3 = cliArgv[3];
-	let arg4 = cliArgv[4];
+	const arg3 = cliArgv[3];
+	const arg4 = cliArgv[4];
+	const arg5 = cliArgv[5];
 
-	if (isComplete(generator, name, arg3, arg4)) return cliArgv;
+	if (isComplete(generator, name, arg3, arg4, arg5)) return cliArgv;
 
 	if (!io.isTTY) {
 		if (!generator || !name) {
@@ -52,9 +45,12 @@ export async function resolveNewArgsInteractive(
 			const region = backendNeedsRegion(backend)
 				? (arg4 ?? defaultRegionForBackend(backend))
 				: undefined;
-			return region
-				? ["new", generator, name, backend, region]
-				: ["new", generator, name, backend];
+			const provider = arg5 ?? recommendedProviderForBackend(backend);
+			const args = ["new", generator, name, backend];
+			if (region) args.push(region);
+			else if (arg4) args.push(arg4); // keep it if it was passed
+			if (provider) args.push(provider);
+			return args;
 		}
 		if (generator === "stack") {
 			const provider = arg3 ?? "aws";
@@ -71,24 +67,42 @@ export async function resolveNewArgsInteractive(
 	}
 
 	if (generator === "project") {
-		const backend = arg3 && BACKEND_OPTIONS.includes(arg3 as never)
-			? arg3
-			: await io.select("Select backend", BACKEND_OPTIONS, 0);
-		const region = backendNeedsRegion(backend)
-			? await promptRegion(io, defaultRegionForBackend(backend), arg4)
+		const backend =
+			arg3 && BACKEND_OPTIONS.includes(arg3 as never)
+				? (arg3 as BackendType)
+				: ((await io.select(
+						"Select backend",
+						BACKEND_OPTIONS,
+						0,
+					)) as BackendType);
+		const region = backendNeedsRegion(backend as string)
+			? await promptRegion(io, defaultRegionForBackend(backend as string), arg4)
 			: undefined;
-		return region
-			? ["new", generator, name, backend, region]
-			: ["new", generator, name, backend];
+		const provider =
+			arg5 && PROVIDER_OPTIONS.includes(arg5 as never)
+				? (arg5 as ProviderType)
+				: ((await io.select(
+						"Select default provider",
+						PROVIDER_OPTIONS,
+						0,
+					)) as ProviderType);
+
+		const args = ["new", generator, name, backend];
+		if (region) args.push(region);
+		else if (arg4) args.push(arg4); // keep it if it was passed
+		if (provider) args.push(provider);
+		return args;
 	}
 
 	if (generator === "stack") {
-		const provider = arg3 && PROVIDER_OPTIONS.includes(arg3 as never)
-			? arg3
-			: await io.select("Select provider", PROVIDER_OPTIONS, 0);
-		const region = providerNeedsRegion(provider) && !arg4
-			? await promptRegion(io, defaultRegionForProvider(provider), arg4)
-			: arg4;
+		const provider =
+			arg3 && PROVIDER_OPTIONS.includes(arg3 as never)
+				? arg3
+				: await io.select("Select provider", PROVIDER_OPTIONS, 0);
+		const region =
+			providerNeedsRegion(provider) && !arg4
+				? await promptRegion(io, defaultRegionForProvider(provider), arg4)
+				: arg4;
 		return region
 			? ["new", generator, name, provider, region]
 			: ["new", generator, name, provider];
@@ -102,11 +116,13 @@ function isComplete(
 	name: string | undefined,
 	arg3: string | undefined,
 	arg4: string | undefined,
+	arg5: string | undefined,
 ): boolean {
 	if (!generator || !name) return false;
 	if (generator === "project") {
 		if (!arg3) return false;
 		if (backendNeedsRegion(arg3) && !arg4) return false;
+		if (!arg5) return false;
 		return true;
 	}
 	if (generator === "stack") {
@@ -130,9 +146,9 @@ async function promptRegion(
 ): Promise<string> {
 	if (initial && VALID_REGION.test(initial)) return initial;
 	while (true) {
-		const value = (await io.ask(
-			`\x1b[36mRegion\x1b[0m [${fallback}]: `,
-		)).trim();
+		const value = (
+			await io.ask(`\x1b[36mRegion\x1b[0m [${fallback}]: `)
+		).trim();
 		const result = value || fallback;
 		if (VALID_REGION.test(result)) return result;
 	}

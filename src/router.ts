@@ -1,20 +1,27 @@
 import { initTRPC } from "@trpc/server";
 import { z } from "zod/v4";
-import type { SubspaceContext } from "./context.js";
-import { runDoctor } from "./commands/doctor.js";
-import { runPlan } from "./commands/plan.js";
 import { runApply } from "./commands/apply.js";
 import { runDestroy } from "./commands/destroy.js";
+import { runDoctor } from "./commands/doctor.js";
 import { runNew } from "./commands/new.js";
+import { runPlan } from "./commands/plan.js";
+import type { SubspaceContext } from "./context.js";
 
 const t = initTRPC.context<SubspaceContext>().create();
 
 const workflowInput = z.object({
 	stack: z.string().describe("Stack name").meta({ positional: true }),
-	env: z.string().optional().describe("Environment name").meta({ positional: true }),
+	env: z
+		.string()
+		.optional()
+		.describe("Environment name")
+		.meta({ positional: true }),
 });
 const newInput = z.object({
-	generator: z.enum(["project", "module", "stack"]).describe("Generator type").meta({ positional: true }),
+	generator: z
+		.enum(["project", "module", "stack"])
+		.describe("Generator type")
+		.meta({ positional: true }),
 	name: z.string().describe("Resource name").meta({ positional: true }),
 	arg3: z
 		.string()
@@ -25,6 +32,11 @@ const newInput = z.object({
 		.string()
 		.optional()
 		.describe("Generator-specific fourth positional argument")
+		.meta({ positional: true }),
+	arg5: z
+		.string()
+		.optional()
+		.describe("Generator-specific fifth positional argument")
 		.meta({ positional: true }),
 });
 
@@ -69,22 +81,23 @@ export const router = t.router({
 			const normalized =
 				input.generator === "project"
 					? {
-						generator: input.generator,
-						name: input.name,
-						backend: input.arg3,
-						region: input.arg4,
-					}
+							generator: input.generator,
+							name: input.name,
+							backend: input.arg3,
+							region: input.arg4,
+							provider: input.arg5,
+						}
 					: input.generator === "stack"
 						? {
-							generator: input.generator,
-							name: input.name,
-							provider: input.arg3,
-							region: input.arg4,
-						}
+								generator: input.generator,
+								name: input.name,
+								provider: input.arg3,
+								region: input.arg4,
+							}
 						: {
-							generator: input.generator,
-							name: input.name,
-						};
+								generator: input.generator,
+								name: input.name,
+							};
 			const code = await runNew(ctx, normalized);
 			if (code !== 0) process.exit(code);
 		}),

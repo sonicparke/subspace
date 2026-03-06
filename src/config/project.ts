@@ -23,15 +23,21 @@ export async function saveProjectConfig(
 
 export function parseProjectConfig(content: string): ProjectConfig {
 	const parsed = parseTomlLite(content);
-	const backend = (parsed.project?.backend as BackendType | undefined) ?? "local";
+	const backend =
+		(parsed.project?.backend as BackendType | undefined) ?? "local";
+	const provider = parsed.project?.provider as ProviderType | undefined;
 	const allowed = parsed.policy?.allowed_providers;
 	return {
-		project: { backend },
+		project: { backend, provider },
 		backend: {
 			region: parsed.backend?.region as string | undefined,
 			bucket: parsed.backend?.bucket as string | undefined,
-			resource_group_name: parsed.backend?.resource_group_name as string | undefined,
-			storage_account_name: parsed.backend?.storage_account_name as string | undefined,
+			resource_group_name: parsed.backend?.resource_group_name as
+				| string
+				| undefined,
+			storage_account_name: parsed.backend?.storage_account_name as
+				| string
+				| undefined,
 			container_name: parsed.backend?.container_name as string | undefined,
 		},
 		policy: allowed
@@ -45,8 +51,11 @@ export function serializeProjectConfig(config: ProjectConfig): string {
 	for (const [k, v] of Object.entries(config.backend)) {
 		if (v) backendKv[k] = v;
 	}
+	const projectKv: Record<string, string> = { backend: config.project.backend };
+	if (config.project.provider) projectKv.provider = config.project.provider;
+
 	const sections: Record<string, Record<string, string | string[]>> = {
-		project: { backend: config.project.backend },
+		project: projectKv,
 		backend: backendKv,
 	};
 	if (config.policy?.allowed_providers?.length) {

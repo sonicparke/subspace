@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { resolveNewArgsInteractive } from "../../src/commands/new-interactive.js";
 
 const selectDefault = async (
@@ -19,26 +19,33 @@ describe("resolveNewArgsInteractive", () => {
 
 	it("returns unchanged argv when complete project args are provided", async () => {
 		const result = await resolveNewArgsInteractive(
-			["new", "project", "demo", "s3", "us-west-2"],
+			["new", "project", "demo", "s3", "us-west-2", "aws"],
 			{
 				isTTY: true,
 				ask: async () => "",
 				select: selectDefault,
 			},
 		);
-		expect(result).toEqual(["new", "project", "demo", "s3", "us-west-2"]);
+		expect(result).toEqual([
+			"new",
+			"project",
+			"demo",
+			"s3",
+			"us-west-2",
+			"aws",
+		]);
 	});
 
-	it("defaults project backend to local when omitted", async () => {
+	it("defaults project backend and provider in non-interactive mode", async () => {
 		const result = await resolveNewArgsInteractive(["new", "project", "demo"], {
 			isTTY: false,
 			ask: async () => "",
 			select: selectDefault,
 		});
-		expect(result).toEqual(["new", "project", "demo", "local"]);
+		expect(result).toEqual(["new", "project", "demo", "local", "aws"]);
 	});
 
-	it("defaults project region for s3 in non-interactive mode", async () => {
+	it("defaults project region and provider for s3 in non-interactive mode", async () => {
 		const result = await resolveNewArgsInteractive(
 			["new", "project", "demo", "s3"],
 			{
@@ -47,7 +54,14 @@ describe("resolveNewArgsInteractive", () => {
 				select: selectDefault,
 			},
 		);
-		expect(result).toEqual(["new", "project", "demo", "s3", "us-east-1"]);
+		expect(result).toEqual([
+			"new",
+			"project",
+			"demo",
+			"s3",
+			"us-east-1",
+			"aws",
+		]);
 	});
 
 	it("prompts stack provider and region in interactive mode", async () => {
