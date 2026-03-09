@@ -1,13 +1,17 @@
-import { createCli } from "trpc-cli";
+import { createCLI } from "@oscli-dev/oscli";
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
 import { createInterface } from "node:readline/promises";
-import { router } from "./router.js";
+import { runApply } from "./commands/apply.js";
+import { runDestroy } from "./commands/destroy.js";
+import { runDoctor } from "./commands/doctor.js";
+import { runNew } from "./commands/new.js";
 import { version } from "./version.js";
 import { preprocessArgv } from "./argv/preprocess.js";
 import { detectEngine } from "./engine/detect.js";
 import { createRealContext } from "./context.js";
 import { resolveNewArgsInteractive } from "./commands/new-interactive.js";
+import { runPlan } from "./commands/plan.js";
 
 const execFileAsync = promisify(execFileCb);
 const ANSI = {
@@ -20,6 +24,15 @@ const ANSI = {
 
 async function main() {
 	const raw = process.argv.slice(2);
+	if (shouldPrintVersion(raw)) {
+		console.log(version);
+		return;
+	}
+	if (shouldPrintHelp(raw)) {
+		printHelp();
+		return;
+	}
+
 	const { cliArgv: preCliArgv, engineFlag, engineArgs } = preprocessArgv(raw);
 
 	let cliArgv: string[];
@@ -73,19 +86,157 @@ async function main() {
 	}
 
 	const ctx = createRealContext(engine, engineArgs);
+	const parsed = parseResolvedArgv(cliArgv);
 
-	const cli = createCli({ router, name: "subspace", version, context: ctx });
+	process.argv = [process.argv[0] ?? "node", "subspace", ...cliArgv];
 
-	// Patch Commander so help text shows "apply" instead of "_apply".
-	// The tRPC router uses "_apply" to avoid the reserved word "apply",
-	// but Commander's renamed command accepts "apply" from the user.
-	// trpc-cli's internal procedurePath stays "_apply" for caller resolution.
-	const program = cli.buildProgram() as unknown as import("commander").Command;
-	const applyCmd = program.commands.find((c) => c.name() === "_apply");
-	if (applyCmd) (applyCmd as unknown as { _name: string })._name = "apply";
-	program.description(program.description().replace("_apply", "apply"));
+	const cli = createCLI(() => ({
+		description: "Terraspace-style CLI for OpenTofu and Terraform.",
+		autocompleteHint: "Run `subspace --help` to see available commands.",
+	}));
 
-	await program.parseAsync(cliArgv, { from: "user" });
+	cli.command("doctor", async () => {
+		const code = await runDoctor(ctx);
+		if (code !== 0) process.exit(code);
+	});
+
+	cli.command("plan <stack> [env]", async () => {
+		assertWorkflowCommand(parsed, "plan");
+		const code = await runPlan(ctx, { stack: parsed.stack, env: parsed.env });
+		if (code !== 0) process.exit(code);
+	});
+
+	cli.command("apply <stack> [env]", async () => {
+		assertWorkflowCommand(parsed, "apply");
+		const code = await runApply(ctx, { stack: parsed.stack, env: parsed.env });
+		if (code !== 0) process.exit(code);
+	});
+
+	cli.command("destroy <stack> [env]", async () => {
+		assertWorkflowCommand(parsed, "destroy");
+		const code = await runDestroy(ctx, {
+			stack: parsed.stack,
+			env: parsed.env,
+		});
+		if (code !== 0) process.exit(code);
+	});
+
+	cli.command("new [generator] [name] [arg3] [arg4] [arg5]", async () => {
+		assertNewCommand(parsed);
+		const normalized =
+			parsed.generator === "project"
+				? {
+						generator: parsed.generator,
+						name: parsed.name,
+						backend: parsed.arg3,
+						region: parsed.arg4,
+						provider: parsed.arg5,
+					}
+				: parsed.generator === "stack"
+					? {
+							generator: parsed.generator,
+							name: parsed.name,
+							provider: parsed.arg3,
+							region: parsed.arg4,
+						}
+					: {
+							generator: parsed.generator,
+							name: parsed.name,
+						};
+		const code = await runNew(ctx, normalized);
+		if (code !== 0) process.exit(code);
+	});
+
+	await cli.run();
+}
+
+type WorkflowCommandName = "plan" | "apply" | "destroy";
+
+type ParsedArgv =
+	| { command: "doctor" }
+	| { command: WorkflowCommandName; stack: string; env?: string }
+	| {
+			command: "new";
+			generator: "project" | "module" | "stack";
+			name: string;
+			arg3?: string;
+			arg4?: string;
+			arg5?: string;
+	  }
+	| undefined;
+
+function parseResolvedArgv(cliArgv: string[]): ParsedArgv {
+	const [command, arg1, arg2, arg3, arg4, arg5] = cliArgv;
+	switch (command) {
+		case "doctor":
+			return { command };
+		case "plan":
+		case "apply":
+		case "destroy":
+			if (!arg1) return undefined;
+			return { command, stack: arg1, env: arg2 };
+		case "new":
+			if (
+				!arg1 ||
+				!arg2 ||
+				(arg1 !== "project" && arg1 !== "module" && arg1 !== "stack")
+			) {
+				return undefined;
+			}
+			return {
+				command,
+				generator: arg1,
+				name: arg2,
+				arg3,
+				arg4,
+				arg5,
+			};
+		default:
+			throw new Error(`unsupported command "${command ?? ""}"`);
+	}
+}
+
+function assertWorkflowCommand(
+	parsed: ParsedArgv,
+	command: WorkflowCommandName,
+): asserts parsed is Exclude<Extract<ParsedArgv, { command: WorkflowCommandName }>, undefined> {
+	if (!parsed || parsed.command !== command) {
+		throw new Error(`expected ${command} command`);
+	}
+}
+
+function assertNewCommand(
+	parsed: ParsedArgv,
+): asserts parsed is Exclude<Extract<ParsedArgv, { command: "new" }>, undefined> {
+	if (!parsed || parsed.command !== "new") {
+		throw new Error('expected "new" command');
+	}
+}
+
+function shouldPrintHelp(raw: string[]): boolean {
+	return raw.length === 0 || raw[0] === "help" || raw.includes("--help") || raw.includes("-h");
+}
+
+function shouldPrintVersion(raw: string[]): boolean {
+	return raw.length === 1 && (raw[0] === "--version" || raw[0] === "-V");
+}
+
+function printHelp(): void {
+	console.log(`Subspace
+
+Terraspace-style CLI for OpenTofu and Terraform.
+
+Usage:
+  subspace plan <stack> [env] [--engine tofu|terraform] -- <engineArgs...>
+  subspace apply <stack> [env] [--engine tofu|terraform] -- <engineArgs...>
+  subspace destroy <stack> [env] [--engine tofu|terraform] -- <engineArgs...>
+  subspace new project <name> [backend] [region] [provider]
+  subspace new module <name>
+  subspace new stack <name> [provider] [region]
+  subspace new
+  subspace doctor
+  subspace --version
+  subspace --help`);
 }
 
 async function askQuestion(question: string): Promise<string> {

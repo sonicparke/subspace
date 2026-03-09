@@ -2,7 +2,7 @@
 
 Terraspace-style CLI for OpenTofu and Terraform.
 
-Subspace wraps OpenTofu/Terraform with convention-over-configuration project structure, automatic variable layering, and per-environment state isolation. It compiles to a single binary via Bun.
+Subspace wraps OpenTofu/Terraform with convention-over-configuration project structure, automatic variable layering, and per-environment state isolation. The CLI is built on [oscli](https://www.oscli.dev/) and compiles to a single binary via Bun.
 
 ## Features
 

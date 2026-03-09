@@ -8,7 +8,7 @@ Subspace is a Bun-first TypeScript CLI that wraps OpenTofu and Terraform workflo
 
 - **Runtime / distribution**: Bun-first single binary (compile with `pnpm build`).
 - **Package manager / tooling**: `pnpm` + `biome` + `vitest` + `typescript`.
-- **CLI framework**: `trpc-cli` (mmkal) + `@trpc/server` + `zod` (prefer `zod/v4`).
+- **CLI framework**: `@oscli-dev/oscli`.
 - **Programming style**: functional (no OO); commands are plain functions with injected dependencies.
 - **Engine compatibility**: support **OpenTofu** (`tofu`) and **Terraform** (`terraform`).
 - **Default engine**: prefer `tofu` if available; fallback to `terraform`. Overridable via `--engine` flag or `SUBSPACE_ENGINE` env var.
@@ -19,6 +19,10 @@ Subspace is a Bun-first TypeScript CLI that wraps OpenTofu and Terraform workflo
 
 ## CLI Contract
 
+This section defines the target public contract for the `oscli` migration. The
+goal is to keep current Subspace behavior unless the contract below explicitly
+changes it.
+
 ### Workflow Commands
 ```bash
 subspace plan    <stack> [env] [--engine tofu|terraform] -- <engineArgs...>
@@ -26,18 +30,56 @@ subspace apply   <stack> [env] [--engine tofu|terraform] -- <engineArgs...>
 subspace destroy <stack> [env] [--engine tofu|terraform] -- <engineArgs...>
 ```
 
+Expected behavior:
+- `stack` remains required.
+- `env` remains optional.
+- `--engine` continues to override auto-detection.
+- engine passthrough after `--` remains supported during migration.
+- help and validation errors should be emitted through `oscli`/Commander rather
+  than custom handwritten output.
+- command execution still delegates to `runPlan`, `runApply`, and `runDestroy`.
+
 ### Generator Commands
 ```bash
-subspace new project <name> [backend] [region]
+subspace new project <name> [backend] [region] [provider]
 subspace new module  <name>
 subspace new stack   <name> [provider] [region]
 subspace new          # Interactive mode
 ```
 
+Expected behavior:
+- `subspace new` uses native `oscli` prompts and selection widgets instead of
+  the legacy ANSI menu renderer.
+- prompt defaults stay aligned with current generator logic:
+  - project backend default: `local`
+  - project provider default: backend-derived recommendation
+  - project region default: backend-derived region when needed
+  - stack provider default: `aws`
+  - stack region default: provider-derived region when needed
+- non-interactive execution remains supported when enough args/flags are
+  supplied.
+- prompt bypass via matching `oscli` flags is the preferred end state.
+
 ### Utility Commands
 ```bash
 subspace doctor
 ```
+
+Expected behavior:
+- `doctor` remains non-interactive.
+- output moves to `oscli` primitives and leveled logs, but the underlying checks
+  stay the same.
+- exit code remains `0` for advisory warnings and non-zero only for hard
+  failures.
+
+### Global UX
+
+Expected behavior:
+- `subspace --help` and `subspace --version` are handled by the CLI framework.
+- command help is consistent across all commands.
+- interactive prompts share a single `oscli` theme.
+- machine-readable output can be added later via `oscli` JSON mode, but that is
+  not required to preserve current behavior.
 
 ## Engine Detection
 
@@ -98,7 +140,8 @@ To rebuild Subspace:
 3. **Scaffolding**: Implement `new` generators with `renderBackendTf` and `renderProviderTf`.
 4. **Workflow**: Implement `runAcrossRegions` (fanout) and `cleanRebuild`.
 5. **Engine**: Implement `detectEngine` and `invokeEngine` with init-retry logic.
-6. **CLI**: Use `trpc-cli` to wire procedures to the router.
+6. **CLI**: Use `oscli` to register commands, prompts, flags, and shared
+   output styling.
 
 ---
 [Features Tracker](features.md) | [Bugs Tracker](bugs.md)

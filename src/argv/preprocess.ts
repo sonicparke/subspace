@@ -1,5 +1,5 @@
 export interface PreprocessedArgv {
-	/** Argv to pass to trpc-cli (before `--`, with `--engine` stripped) */
+	/** Argv to pass to the CLI command router (before `--`, with `--engine` stripped) */
 	cliArgv: string[];
 	/** Engine override from `--engine` flag, if provided */
 	engineFlag: string | undefined;
