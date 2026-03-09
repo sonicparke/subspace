@@ -10,11 +10,10 @@ import {
 	type CliRuntime,
 } from "./runtime.js";
 
+type SubspaceCli = ReturnType<typeof buildCli>;
+
 export function createSubspaceCli(runtime: CliRuntime) {
-	const cli = createCLI(() => ({
-		description: "Terraspace-style CLI for OpenTofu and Terraform.",
-		autocompleteHint: "Run `subspace --help` to see available commands.",
-	}));
+	const cli = buildCli();
 
 	cli.command("doctor", async () => {
 		await exitOnFailure(runDoctor(runtime.ctx));
@@ -52,8 +51,19 @@ export function createSubspaceCli(runtime: CliRuntime) {
 	return cli;
 }
 
+function buildCli() {
+	return createCLI((b) => ({
+		description: "Terraspace-style CLI for OpenTofu and Terraform.",
+		autocompleteHint: "Run `subspace --help` to see available commands.",
+		flags: {
+			stack: b.flag().string().label("Stack").optional(),
+			env: b.flag().string().label("Environment").optional(),
+		},
+	}));
+}
+
 function registerWorkflowCommand(
-	cli: ReturnType<typeof createCLI>,
+	cli: SubspaceCli,
 	runtime: CliRuntime,
 	command: "plan" | "apply" | "destroy",
 	handler: (
@@ -61,12 +71,20 @@ function registerWorkflowCommand(
 		input: { stack: string; env?: string },
 	) => Promise<number>,
 ): void {
-	cli.command(`${command} <stack> [env]`, async () => {
+	cli.command(`${command} [stack] [env]`, async () => {
 		assertWorkflowCommand(runtime.parsed, command);
+		const stack = cli.flags.stack ?? runtime.parsed.stack;
+		const env = cli.flags.env ?? runtime.parsed.env;
+		if (!stack) {
+			cli.exit(`Missing required stack for "${command}".`, {
+				code: "usage",
+				hint: `Use \`subspace ${command} <stack>\` or pass \`--stack <name>\`.`,
+			});
+		}
 		await exitOnFailure(
 			handler(runtime.ctx, {
-				stack: runtime.parsed.stack,
-				env: runtime.parsed.env,
+				stack,
+				env,
 			}),
 		);
 	});

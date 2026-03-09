@@ -218,6 +218,25 @@ describe("CLI integration", () => {
 		expect(envVars).toBe("env = true\n");
 	});
 
+	it("plan accepts oscli flags for stack and env", async () => {
+		const stackDir = join(tmpDir, "app/stacks/flagstack");
+		await mkdir(stackDir, { recursive: true });
+		await writeFile(join(stackDir, "main.tf"), "# empty");
+
+		const tfvarsDir = join(stackDir, "tfvars");
+		await mkdir(tfvarsDir, { recursive: true });
+		await writeFile(join(tfvarsDir, "base.tfvars"), "base = true\n");
+		await writeFile(join(tfvarsDir, "prod.tfvars"), "env = true\n");
+
+		const result = await run("plan --stack flagstack --env prod", { cwd: tmpDir });
+		expect(result.exitCode).toBe(0);
+
+		const buildDir = join(tmpDir, ".subspace/build/flagstack/global/prod");
+		const entries = await readdir(buildDir);
+		expect(entries).toContain("main.tf");
+		expect(entries).toContain("10-env.auto.tfvars");
+	});
+
 	it("plan injects derived backend bucket and key path", async () => {
 		const stackDir = join(tmpDir, "app/stacks/mystack");
 		await mkdir(stackDir, { recursive: true });

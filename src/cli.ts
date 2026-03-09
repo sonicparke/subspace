@@ -15,7 +15,7 @@ async function main() {
 
 	try {
 		const runtime = await resolveCliRuntime(raw);
-		process.argv = [process.argv[0] ?? "node", "subspace", ...runtime.cliArgv];
+		process.argv = [process.argv[0] ?? "node", "subspace", ...runtime.oscliArgv];
 		await createSubspaceCli(runtime).run();
 	} catch (err) {
 		if ((err as Error).message === "Interrupted") {
