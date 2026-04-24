@@ -274,14 +274,19 @@ async function runEngineCommand(
 	const args = [
 		`-chdir=${buildDir}`,
 		command,
-		...nonInteractiveInputArgs(ctx.engineArgs),
+		...nonInteractiveInputArgs(command, ctx.engineArgs),
 		...ctx.engineArgs,
 	];
 	return ctx.execStream(ctx.engine, args);
 }
 
-function nonInteractiveInputArgs(engineArgs: string[]): string[] {
+function nonInteractiveInputArgs(command: string, engineArgs: string[]): string[] {
+	if (!usesInteractiveInput(command)) return [];
 	return hasInputFlag(engineArgs) ? [] : ["-input=false"];
+}
+
+function usesInteractiveInput(command: string): boolean {
+	return command === "plan" || command === "apply" || command === "destroy";
 }
 
 function hasInputFlag(engineArgs: string[]): boolean {

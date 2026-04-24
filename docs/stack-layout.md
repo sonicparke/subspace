@@ -48,7 +48,10 @@ When materializing `app/stacks/<stack>` + referenced `app/modules/<name>/` into 
    - `.terraform/` (excluded from source copy; the preserved copy stays in place)
    - `.subspace/` (build output must not nest)
    - `tfvars/` (Subspace writes layered var files into the emitted root module)
-4. Write layered `*.auto.tfvars` and generated `providers.tf` into `<buildRoot>/stacks/<stack>/`.
+4. Write layered `*.auto.tfvars` into `<buildRoot>/stacks/<stack>/`, then emit `providers.tf` by one of:
+   - **Project file present**: copy `config/terraform/providers.tf` verbatim, substituting every occurrence of the literal `__SUBSPACE_REGION__` with the current target region. The project file is authoritative.
+   - **Project file absent, stack `subspace.toml` present**: generate in-memory via `providerTfForRegion()` from the stack config (provider, region, per-region overrides). This is the pre-authoritative fallback path.
+   - **Neither present**: no `providers.tf` is written; the engine relies on whatever the user placed in `app/stacks/<stack>/`.
 5. Wipe `<buildRoot>/modules/` and copy each distinct module referenced by any `.tf` file in the staged stack (or any transitively referenced module) from `app/modules/<name>/` into `<buildRoot>/modules/<name>/`.
    - Module discovery matches `source = "(./|../)+modules/<name>"` (line-level; `#` and `//` commented-out lines are ignored).
    - A referenced module that does not exist at `app/modules/<name>/` causes a fast-fail error.

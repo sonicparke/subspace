@@ -2,6 +2,13 @@ import type { BackendType } from "./backends.js";
 
 export type ProviderType = "aws" | "azure" | "gcp" | "cloudflare";
 
+/**
+ * Literal token embedded in an authoritative `config/terraform/providers.tf`
+ * when it is scaffolded without a concrete region. The build pipeline rewrites
+ * this per-region before copying the file into the stack build dir.
+ */
+export const REGION_PLACEHOLDER = "__SUBSPACE_REGION__";
+
 export interface ProviderSettings {
 	region?: string;
 	project?: string;
@@ -67,7 +74,7 @@ export function renderProviderTf(
 }
 
 provider "aws" {
-  region = "${settings.region ?? "us-east-1"}"
+  region = "${settings.region ?? REGION_PLACEHOLDER}"
 }
 `;
 		case "gcp":
@@ -83,7 +90,7 @@ provider "aws" {
 
 provider "google" {
   project = "${settings.project ?? "replace-me-project-id"}"
-  region  = "${settings.region ?? "us-central1"}"
+  region  = "${settings.region ?? REGION_PLACEHOLDER}"
 }
 `;
 		case "azure":

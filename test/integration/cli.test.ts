@@ -125,29 +125,35 @@ describe("CLI integration", () => {
 			join(projectDir, "app/stacks/network/tfvars/base.tfvars"),
 			"utf-8",
 		);
-		const stackProviders = await readFile(
-			join(projectDir, "app/stacks/network/providers.tf"),
-			"utf-8",
+		const stackEntries = await readdir(
+			join(projectDir, "app/stacks/network"),
 		);
 		expect(moduleMain).toContain("Module resources");
 		expect(stackBase).toContain("Base vars");
-		expect(stackProviders).toContain('required_version = ">= 1.6.0"');
+		expect(stackEntries).not.toContain("providers.tf");
 	});
 
-	it("new project with backend and region writes region-specific templates", async () => {
+	it("new project writes a project-level providers.tf with chosen provider", async () => {
+		const result = await run("new project demo", { cwd: tmpDir });
+		expect(result.exitCode).toBe(0);
+
+		const providers = await readFile(
+			join(tmpDir, "demo/config/terraform/providers.tf"),
+			"utf-8",
+		);
+		expect(providers).toContain('provider "aws"');
+	});
+
+	it("new project with backend and region writes region-aware project providers.tf", async () => {
 		const result = await run("new project demo s3 us-west-2", { cwd: tmpDir });
 		expect(result.exitCode).toBe(0);
-		const stackResult = await run("new stack network", {
-			cwd: join(tmpDir, "demo"),
-		});
-		expect(stackResult.exitCode).toBe(0);
 
 		const backendTf = await readFile(
 			join(tmpDir, "demo/config/terraform/backend.tf"),
 			"utf-8",
 		);
 		const providerTf = await readFile(
-			join(tmpDir, "demo/app/stacks/network/providers.tf"),
+			join(tmpDir, "demo/config/terraform/providers.tf"),
 			"utf-8",
 		);
 		expect(backendTf).toContain('backend "s3"');

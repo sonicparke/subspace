@@ -39,15 +39,15 @@ export function stringifyTomlLite(sections: SectionMap): string {
 		output.push(`[${section}]`);
 		for (const [key, value] of Object.entries(kv)) {
 			if (Array.isArray(value)) {
-				const rendered = value.map((v) => `"${escape(v)}"`).join(", ");
+				const rendered = value.map((v) => `"${escapeTomlString(v)}"`).join(", ");
 				output.push(`${key} = [${rendered}]`);
 			} else {
-				output.push(`${key} = "${escape(value)}"`);
+				output.push(`${key} = "${escapeTomlString(value)}"`);
 			}
 		}
 		output.push("");
 	}
-	return output.join("\n").trimEnd() + "\n";
+	return `${output.join("\n").trimEnd()}\n`;
 }
 
 function unquote(value: string): string {
@@ -60,6 +60,6 @@ function unquote(value: string): string {
 	return value;
 }
 
-function escape(value: string): string {
+function escapeTomlString(value: string): string {
 	return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }

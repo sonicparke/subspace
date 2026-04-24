@@ -110,6 +110,21 @@ describe("invokeEngine", () => {
 		expect(ctx.streamCalls[0].args).toContain("-input=false");
 	});
 
+	it("does not inject -input=false for show", async () => {
+		const ctx = createMockContext({
+			engine: "terraform",
+			files: {
+				"build/.terraform/terraform.tfstate": "{}",
+			},
+			streamHandler: () => 0,
+		});
+
+		await invokeEngine(ctx, "build", "show", "mystack", "prod", "us-east-1");
+
+		expect(ctx.streamCalls[0].args).toContain("show");
+		expect(ctx.streamCalls[0].args).not.toContain("-input=false");
+	});
+
 	it("does not inject -input=false when the user already provided an input flag", async () => {
 		const ctx = createMockContext({
 			engine: "tofu",

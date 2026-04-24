@@ -181,7 +181,9 @@ app/stacks/<stack>/            # Stack source (Terraform/OpenTofu files)
     20-env-secrets.auto.tfvars
     90-local.auto.tfvars
     95-env-local.auto.tfvars
-    providers.tf                                   # Generated from subspace config
+    providers.tf                                   # Emitted from config/terraform/providers.tf
+                                                   # (region placeholder substituted), or
+                                                   # generated from stack subspace.toml as fallback
     main.tf, variables.tf, etc.                    # Copied from app/stacks/<stack>/
   modules/<name>/                                  # Wiped+repopulated each run
                                                    # Only modules referenced via
@@ -273,6 +275,16 @@ Parsed by `src/config/stack-schema.ts` (no Zod — plain TS types + hand-rolled 
 - Recommended backend for each provider
 - Recommended provider for each backend
 - HCL `provider {}` block template rendering
+- `REGION_PLACEHOLDER` (`__SUBSPACE_REGION__`): literal token written into `config/terraform/providers.tf` when scaffolded without a concrete region. The build pipeline (`src/commands/workflow.ts`) substitutes it per-region via `rewriteProviderTfRegion()` before copying the file into the stack build dir.
+
+### Build-time `providers.tf` resolution
+
+Emission order at `src/commands/workflow.ts`:
+1. If `config/terraform/providers.tf` exists → copy into `<buildRoot>/stacks/<stack>/providers.tf` with `__SUBSPACE_REGION__` substituted for the current region. Project file is authoritative.
+2. Else if stack `subspace.toml` is present → generate in-memory via `providerTfForRegion()` from stack config (preserves pre-F-007 behavior for projects that haven't opted in).
+3. Else → write nothing.
+
+`subspace new stack` does **not** write `app/stacks/<stack>/providers.tf`. A single source of truth lives at the project level.
 
 ## `new` Command — Scaffold Generator
 

@@ -31,10 +31,41 @@ describe("runNew", () => {
 		expect(ctx.files["demo/config/terraform/backend.tf"]).toContain(
 			'region = "us-west-2"',
 		);
-		expect(ctx.files["demo/config/terraform/provider.tf"]).toBeUndefined();
+		expect(ctx.files["demo/config/terraform/providers.tf"]).toBeUndefined();
 	});
 
-	it("creates provider config in stack for s3 backend from project config", async () => {
+	it("creates project providers.tf when provider is supplied", async () => {
+		const ctx = createMockContext();
+		const code = await runNew(ctx, {
+			generator: "project",
+			name: "demo",
+			backend: "s3",
+			provider: "aws",
+			region: "us-west-2",
+		});
+
+		expect(code).toBe(0);
+		const providers = ctx.files["demo/config/terraform/providers.tf"];
+		expect(providers).toBeDefined();
+		expect(providers).toContain('provider "aws"');
+		expect(providers).toContain('region = "us-west-2"');
+	});
+
+	it("writes REGION_PLACEHOLDER in project providers.tf when no region supplied", async () => {
+		const ctx = createMockContext();
+		const code = await runNew(ctx, {
+			generator: "project",
+			name: "demo",
+			provider: "aws",
+		});
+
+		expect(code).toBe(0);
+		const providers = ctx.files["demo/config/terraform/providers.tf"];
+		expect(providers).toBeDefined();
+		expect(providers).toContain('region = "__SUBSPACE_REGION__"');
+	});
+
+	it("records inferred provider in stack subspace.toml for s3 backend", async () => {
 		const ctx = createMockContext({
 			files: {
 				"app/stacks/.keep": "",
@@ -49,18 +80,14 @@ describe("runNew", () => {
 		});
 		const code = await runNew(ctx, { generator: "stack", name: "network" });
 		expect(code).toBe(0);
-		expect(ctx.files["app/stacks/network/providers.tf"]).toContain(
-			'source  = "hashicorp/aws"',
-		);
-		expect(ctx.files["app/stacks/network/providers.tf"]).toContain(
-			'provider "aws"',
-		);
-		expect(ctx.files["app/stacks/network/providers.tf"]).toContain(
-			'region = "us-west-2"',
-		);
+		expect(ctx.files["app/stacks/network/providers.tf"]).toBeUndefined();
+		const stackToml = ctx.files["app/stacks/network/subspace.toml"];
+		expect(stackToml).toBeDefined();
+		expect(stackToml).toContain('provider = "aws"');
+		expect(stackToml).toContain("us-west-2");
 	});
 
-	it("creates provider config in stack for gcs backend from project config", async () => {
+	it("records inferred provider in stack subspace.toml for gcs backend", async () => {
 		const ctx = createMockContext({
 			files: {
 				"app/stacks/.keep": "",
@@ -74,15 +101,10 @@ describe("runNew", () => {
 		});
 		const code = await runNew(ctx, { generator: "stack", name: "network" });
 		expect(code).toBe(0);
-		expect(ctx.files["app/stacks/network/providers.tf"]).toContain(
-			'source  = "hashicorp/google"',
-		);
-		expect(ctx.files["app/stacks/network/providers.tf"]).toContain(
-			'provider "google"',
-		);
-		expect(ctx.files["app/stacks/network/providers.tf"]).toContain(
-			'region  = "us-central1"',
-		);
+		expect(ctx.files["app/stacks/network/providers.tf"]).toBeUndefined();
+		const stackToml = ctx.files["app/stacks/network/subspace.toml"];
+		expect(stackToml).toBeDefined();
+		expect(stackToml).toContain('provider = "gcp"');
 	});
 
 	it("errors when project already exists", async () => {
@@ -134,9 +156,7 @@ describe("runNew", () => {
 		expect(code).toBe(0);
 		expect(ctx.files["app/stacks/network/main.tf"]).toContain("Stack resources");
 		expect(ctx.files["app/stacks/network/backend.tf"]).toContain('backend "local"');
-		expect(ctx.files["app/stacks/network/providers.tf"]).toContain(
-			'required_version = ">= 1.6.0"',
-		);
+		expect(ctx.files["app/stacks/network/providers.tf"]).toBeUndefined();
 		expect(ctx.files["app/stacks/network/tfvars/base.tfvars"]).toContain("Base vars");
 	});
 

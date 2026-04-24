@@ -38,7 +38,7 @@ terraform {
 	});
 
 	it("accepts double-quoted ERB string arguments", () => {
-		const content = `bucket = "<%= expansion(\"my-bucket-:ENV\") %>"`;
+		const content = `bucket = "<%= expansion("my-bucket-:ENV") %>"`;
 
 		const result = extractTemplates(content);
 

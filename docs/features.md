@@ -12,8 +12,20 @@ This document tracks new feature requests and completed enhancements for Subspac
 | F-004 | Parallel Region Fanout | 2026-03-05 | Done | Medium | Speed up multi-region plans/applies. |
 | F-005 | Backend reconfiguration flags | 2026-03-05 | Done | Medium | Auto-add `-reconfigure` when backend config changes; surface `-migrate-state` errors (deliberately not auto-applied). |
 | F-006 | Terraform-best-practice build layout | 2026-04-23 | Done | High | `<buildRoot>/stacks/<stack>/` + sibling `<buildRoot>/modules/` so user `source = "../../modules/<name>"` resolves without rewriting. |
+| F-007 | Project-level `providers.tf` | 2026-04-24 | Done | High | Single authoritative source of truth for provider config at `config/terraform/providers.tf`; per-region substitution at build time; per-stack `providers.tf` retired. |
 
 ## Feature Details
+
+### F-007: Project-level `providers.tf`
+- **Status**: Done (2026-04-24)
+- **Why**: Provider configuration previously had two sources of truth — `new stack` wrote `app/stacks/<stack>/providers.tf` on disk, and the build pipeline regenerated a separate `providers.tf` in-memory every run. Users editing the on-disk file saw their edits silently overwritten.
+- **Spec**: [docs/specs/project-providers-tf.md](specs/project-providers-tf.md).
+- **Scope**:
+  - [src/commands/new.ts](../src/commands/new.ts): `new project` writes `config/terraform/providers.tf` whenever a provider is selected; `new stack` no longer writes a per-stack `providers.tf`.
+  - [src/commands/workflow.ts](../src/commands/workflow.ts): build-time emission now resolves in order — project file (copied with region substitution) → stack `subspace.toml` fallback → skip.
+  - [src/domain/providers.ts](../src/domain/providers.ts): exports `REGION_PLACEHOLDER = "__SUBSPACE_REGION__"`; `renderProviderTf()` emits it when `settings.region` is undefined (AWS, GCP only).
+  - [src/regions/provider-template.ts](../src/regions/provider-template.ts): adds `rewriteProviderTfRegion(content, region)` — idempotent placeholder substitution.
+- **Tests**: [test/commands/new.test.ts](../test/commands/new.test.ts), [test/commands/plan.test.ts](../test/commands/plan.test.ts), [test/regions/provider-template.test.ts](../test/regions/provider-template.test.ts), [test/integration/cli.test.ts](../test/integration/cli.test.ts).
 
 ### F-002: App-name bucket derivation
 - **Status**: Done

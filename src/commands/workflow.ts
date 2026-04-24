@@ -5,7 +5,10 @@ import { invokeEngine } from "../engine/invoke.js";
 import { loadStackConfig } from "../config/stack-config.js";
 import { loadMigrationConfig } from "../migrate/config.js";
 import { resolveTargetRegions, validateRegions } from "../regions/resolve.js";
-import { providerTfForRegion } from "../regions/provider-template.js";
+import {
+	providerTfForRegion,
+	rewriteProviderTfRegion,
+} from "../regions/provider-template.js";
 import { runAcrossRegions } from "../regions/fanout.js";
 
 const APP_MODULES_DIR = "app/modules";
@@ -76,7 +79,12 @@ export async function runWorkflow(
 			});
 			await writeVarLayers(ctx, stackDir, stackWorkDir, env, varLayerRoots);
 
-			if (stackConfig) {
+			const projectProvidersTf = "config/terraform/providers.tf";
+			if (await ctx.fs.exists(projectProvidersTf)) {
+				const content = await ctx.fs.readFile(projectProvidersTf);
+				const rewritten = rewriteProviderTfRegion(content, region);
+				await ctx.fs.writeFile(`${stackWorkDir}/providers.tf`, rewritten);
+			} else if (stackConfig) {
 				const providersTf = providerTfForRegion({
 					provider: stackConfig.stack.provider,
 					region,

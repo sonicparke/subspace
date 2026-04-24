@@ -132,6 +132,78 @@ regions = ["us-east-1"]`,
 		).toBe("nested vendor module");
 	});
 
+	it("copies config/terraform/providers.tf into the build dir with region substituted", async () => {
+		const ctx = createMockContext({
+			engine: "tofu",
+			files: {
+				"app/stacks/mystack/main.tf": "resource {}",
+				"config/terraform/providers.tf": `provider "aws" {
+  region = "__SUBSPACE_REGION__"
+}
+`,
+			},
+			streamHandler: () => 0,
+		});
+
+		const code = await runPlan(ctx, { stack: "mystack", env: "prod" });
+
+		expect(code).toBe(0);
+		const emitted =
+			ctx.files[
+				".subspace/build/mystack/global/prod/stacks/mystack/providers.tf"
+			];
+		expect(emitted).toBeDefined();
+		expect(emitted).toContain('region = "global"');
+		expect(emitted).not.toContain("__SUBSPACE_REGION__");
+	});
+
+	it("falls back to providerTfForRegion when config/terraform/providers.tf is absent", async () => {
+		const ctx = createMockContext({
+			engine: "tofu",
+			files: {
+				"app/stacks/mystack/main.tf": "resource {}",
+				"app/stacks/mystack/subspace.toml": `[stack]
+name = "mystack"
+provider = "aws"
+
+[provider]
+region = "us-east-1"
+`,
+			},
+			streamHandler: () => 0,
+		});
+
+		const code = await runPlan(ctx, { stack: "mystack", env: "prod" });
+
+		expect(code).toBe(0);
+		const emitted =
+			ctx.files[
+				".subspace/build/mystack/global/prod/stacks/mystack/providers.tf"
+			];
+		expect(emitted).toBeDefined();
+		expect(emitted).toContain('provider "aws"');
+		expect(emitted).toContain('region = "us-east-1"');
+	});
+
+	it("emits no providers.tf when project file and stack config are both absent", async () => {
+		const ctx = createMockContext({
+			engine: "tofu",
+			files: {
+				"app/stacks/mystack/main.tf": "resource {}",
+			},
+			streamHandler: () => 0,
+		});
+
+		const code = await runPlan(ctx, { stack: "mystack", env: "prod" });
+
+		expect(code).toBe(0);
+		expect(
+			ctx.files[
+				".subspace/build/mystack/global/prod/stacks/mystack/providers.tf"
+			],
+		).toBeUndefined();
+	});
+
 	it("layers project and stack tfvars during Terraspace migrations", async () => {
 		const ctx = createMockContext({
 			engine: "tofu",
