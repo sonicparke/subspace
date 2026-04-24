@@ -182,6 +182,24 @@ describe("backendConfigFlags", () => {
 		]);
 	});
 
+	it("allows the s3 backend location to be overridden", () => {
+		const flags = backendConfigFlags(
+			"s3",
+			"mystack",
+			"prod",
+			"us-east-1",
+			"demo-app",
+			{
+				bucket: "terraform-state-123456789012-us-east-1-prod",
+				key: "main/us-east-1/prod/stacks/mystack/terraform.tfstate",
+			},
+		);
+		expect(flags).toEqual([
+			"-backend-config=bucket=terraform-state-123456789012-us-east-1-prod",
+			"-backend-config=key=main/us-east-1/prod/stacks/mystack/terraform.tfstate",
+		]);
+	});
+
 	it("returns empty for local backend", () => {
 		expect(
 			backendConfigFlags("local", "mystack", "prod", "global", "demo-app"),

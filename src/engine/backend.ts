@@ -3,6 +3,12 @@ import type { SubspaceContext } from "../context.js";
 export type BackendType = "s3" | "gcs" | "azurerm" | "local" | null;
 const SUPPORTED_BACKENDS = new Set(["s3", "gcs", "azurerm", "local"]);
 
+export interface BackendConfigOverride {
+	bucket?: string;
+	key?: string;
+	prefix?: string;
+}
+
 /**
  * Detect the backend type from HCL files in a build directory.
  * Scans for `backend "<type>"` in .tf files.
@@ -70,6 +76,7 @@ export function backendConfigFlags(
 	env: string,
 	region: string,
 	appName: string,
+	override?: BackendConfigOverride,
 ): string[] {
 	const envKey = env || "__noenv__";
 	const regionKey = region || "__noregion__";
@@ -78,16 +85,16 @@ export function backendConfigFlags(
 	switch (backend) {
 		case "s3":
 			return [
-				`-backend-config=bucket=${buildStateBucketName(appName, backendScope)}`,
-				`-backend-config=key=${statePath}`,
+				`-backend-config=bucket=${override?.bucket ?? buildStateBucketName(appName, backendScope)}`,
+				`-backend-config=key=${override?.key ?? statePath}`,
 			];
 		case "gcs":
 			return [
-				`-backend-config=bucket=${buildStateBucketName(appName, backendScope)}`,
-				`-backend-config=prefix=${statePath.replace(/\/subspace\.tfstate$/, "")}`,
+				`-backend-config=bucket=${override?.bucket ?? buildStateBucketName(appName, backendScope)}`,
+				`-backend-config=prefix=${override?.prefix ?? statePath.replace(/\/subspace\.tfstate$/, "")}`,
 			];
 		case "azurerm":
-			return [`-backend-config=key=${statePath}`];
+			return [`-backend-config=key=${override?.key ?? statePath}`];
 		case "local":
 		case null:
 			return [];

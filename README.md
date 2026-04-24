@@ -6,7 +6,7 @@ Subspace wraps OpenTofu/Terraform with convention-over-configuration project str
 
 ## Features
 
-- **CLI workflows:** `plan`, `apply`, `destroy`, `doctor`
+- **CLI workflows:** `plan`, `apply`, `destroy`, `show`, `doctor`
 - **Interactive generators:**
   - `new project` (backend + optional region)
   - `new module`
@@ -17,7 +17,7 @@ Subspace wraps OpenTofu/Terraform with convention-over-configuration project str
 - **Config scaffolding:** project `subspace.toml`, stack `subspace.toml`, generated `providers.tf`, and backend templates
 - **Variable layering:** base, environment, local, and secret/local overlays
 - **Engine selection:** `--engine`, `SUBSPACE_ENGINE`, and auto-detect (`tofu` then `terraform`)
-- **Regionalized build layout:** `.subspace/build/<stack>/<region>/<env-or-noenv>/`
+- **Regionalized build layout (Terraspace-style):** `.subspace/build/<stack>/<region>/<env-or-noenv>/stacks/<stack>/` with a sibling `modules/` for referenced shared modules
 - **State key isolation:** remote backend state paths include stack, region, and environment
 - **Init-when-needed workflow:** auto-runs `init` when required and retries once on init-required failures
 
@@ -45,6 +45,7 @@ dist/subspace plan network
 subspace plan    <stack> [env] [--engine tofu|terraform] -- <engineArgs...>
 subspace apply   <stack> [env] [--engine tofu|terraform] -- <engineArgs...>
 subspace destroy <stack> [env] [--engine tofu|terraform] -- <engineArgs...>
+subspace show    <stack> [env] [--engine tofu|terraform] -- <engineArgs...>
 subspace new project <name> [backend] [region]
 subspace new module  <name>
 subspace new stack   <name> [provider] [region]
@@ -191,7 +192,22 @@ Run `subspace doctor` to see which engine is active.
 
 ## Build Directory
 
-Subspace uses `.subspace/build/<stack>/<region>/<env>/` as the working directory for engine commands. On every invocation it performs a clean rebuild: all files are deleted **except** `.terraform/`, `.terraform.lock.hcl`, `terraform.tfstate`, and `terraform.tfstate.backup`, then stack source files are re-copied.
+Subspace uses a Terraspace-style build layout rooted at `.subspace/build/<stack>/<region>/<env-or-noenv>/`:
+
+```
+.subspace/build/<stack>/<region>/<env-or-noenv>/
+├── stacks/<stack>/          <- engine chdir target; cleaned-and-rebuilt every run
+│   ├── main.tf              <- copied verbatim from app/stacks/<stack>/*.tf
+│   ├── providers.tf         <- generated from subspace config
+│   ├── backend.tf           <- copied if present
+│   ├── 00-base.auto.tfvars  <- layered tfvars
+│   ├── .terraform/          <- preserved across rebuilds
+│   ├── .terraform.lock.hcl  <- preserved
+│   └── terraform.tfstate*   <- preserved
+└── modules/<name>/          <- sibling dir; copied fresh each run from app/modules/<name>/
+```
+
+On every invocation the `stacks/<stack>/` subdir is cleaned-and-rebuilt (all files deleted **except** `.terraform/`, `.terraform.lock.hcl`, `terraform.tfstate`, and `terraform.tfstate.backup`) then stack source files are re-copied. The `modules/` subdir is wiped and repopulated with only the modules that the stack (or any transitively referenced module) references via `source = "../../modules/<name>"`. This preserves the `stacks/<stack>/` ↔ `modules/<name>/` sibling relationship that user `.tf` files assume, without ever rewriting source.
 
 You should never need to interact with this directory directly.
 

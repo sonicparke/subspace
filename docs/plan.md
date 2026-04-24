@@ -91,30 +91,32 @@ Priority (highest to lowest):
 ## Project Conventions
 
 Source stack directory: `app/stacks/<stack>/`
+Source modules directory: `app/modules/<name>/`
 Stack env var files: `app/stacks/<stack>/tfvars/`
-Emitted working directory: `.subspace/build/<stack>/<region>/<env-or-noenv>/`
+Emitted build root: `.subspace/build/<stack>/<region>/<env-or-noenv>/`, containing sibling `stacks/<stack>/` (engine chdir target) and `modules/<name>/` (referenced modules, copied fresh each run).
 - If no env is provided, Subspace uses `__noenv__`.
 - If no region is provided, Subspace defaults to `global` (unless configured in `subspace.toml`).
 
 ## Engine Invocation
 
-Uses `-chdir=<dir>`:
-- `tofu -chdir=.subspace/build/<stack>/<region>/<env> plan ...`
+Uses `-chdir=<per-stack working dir>`:
+- `tofu -chdir=.subspace/build/<stack>/<region>/<env>/stacks/<stack> plan ...`
 
 ### Init-Only-When-Needed
-1. If `.terraform/` is missing in the emitted dir, run `init` with auto-injected `-backend-config`.
+1. If `.terraform/` is missing in the per-stack working dir, run `init` with auto-injected `-backend-config`.
 2. Run the requested command.
 3. If it fails with an "init required" error, run `init` and retry once.
 
 ## Clean Rebuild Rules
 
-On each invocation, Subspace materializes `app/stacks/<stack>/` into `.subspace/build/...`:
-1. Delete everything in the emitted dir **except**:
+On each invocation, Subspace materializes `app/stacks/<stack>/` + referenced `app/modules/<name>/` into `.subspace/build/...`:
+1. Under `<buildRoot>/stacks/<stack>/`, delete everything **except**:
    - `.terraform/`, `.terraform.lock.hcl`, `terraform.tfstate`, `terraform.tfstate.backup`.
-2. Recursively copy stack source files.
+2. Recursively copy stack source files into `<buildRoot>/stacks/<stack>/`.
 3. Do **not** copy: `.terraform/`, `.subspace/`, `tfvars/`.
-4. Write layered `*.auto.tfvars` files into the root.
-5. Generate `providers.tf` if stack configuration requires regional injection.
+4. Write layered `*.auto.tfvars` files into `<buildRoot>/stacks/<stack>/`.
+5. Generate `providers.tf` into `<buildRoot>/stacks/<stack>/` if stack configuration requires regional injection.
+6. Wipe `<buildRoot>/modules/` and repopulate it with only the modules referenced (transitively) by this stack via `source = "(./|../)+modules/<name>"`. Missing referenced modules fail fast with a clear error.
 
 ## Backend Configuration
 

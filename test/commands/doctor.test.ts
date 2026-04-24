@@ -2,6 +2,37 @@ import { describe, it, expect } from "vitest";
 import { runDoctor } from "../../src/commands/doctor.js";
 import { createMockContext } from "../helpers/mock-context.js";
 
+const LEGACY_MIGRATION_TOML = `[project]
+backend = "s3"
+
+[migration]
+source = "terraspace"
+
+[migration.terraspace]
+bucket_template = "terraform-state-:ACCOUNT-:REGION-:ENV"
+key_template = ":PROJECT/:REGION/:APP/:ROLE/:ENV/:EXTRA/:BUILD_DIR/terraform.tfstate"
+project = "main"
+regions = ["us-east-1"]
+`;
+
+function stsAnd(
+	fallback: (
+		cmd: string,
+		args: string[],
+	) => { stdout: string; stderr: string; exitCode: number },
+) {
+	return (cmd: string, args: string[]) => {
+		if (cmd === "aws" && args[0] === "sts") {
+			return {
+				stdout: JSON.stringify({ Account: "123456789012" }),
+				stderr: "",
+				exitCode: 0,
+			};
+		}
+		return fallback(cmd, args);
+	};
+}
+
 describe("runDoctor", () => {
 	it("reports when tofu is available", async () => {
 		const ctx = createMockContext({
@@ -64,6 +95,119 @@ describe("runDoctor", () => {
 		await runDoctor(ctx);
 
 		expect(ctx.logs.info.some((l) => l.includes("app/stacks/") && l.includes("not found"))).toBe(true);
+	});
+
+	it("--legacy reports 'No migration configured' when [migration] is absent", async () => {
+		const ctx = createMockContext({
+			engine: "tofu",
+			files: { "subspace.toml": '[project]\nbackend = "s3"\n' },
+			execHandler: () => ({ stdout: "{}", stderr: "", exitCode: 0 }),
+		});
+
+		const code = await runDoctor(ctx, { legacy: true });
+
+		expect(code).toBe(0);
+		expect(ctx.logs.info.some((l) => /No migration configured/.test(l))).toBe(
+			true,
+		);
+	});
+
+	it("--legacy reports [preserved] when the configured state key exists for every tuple", async () => {
+		const ctx = createMockContext({
+			engine: "tofu",
+			files: {
+				"subspace.toml": LEGACY_MIGRATION_TOML,
+				"app/stacks/network/main.tf": "",
+				"app/stacks/network/tfvars/prod.tfvars": "",
+			},
+			execHandler: stsAnd(() => ({ stdout: "{}", stderr: "", exitCode: 0 })),
+		});
+
+		const code = await runDoctor(ctx, { legacy: true });
+
+		expect(code).toBe(0);
+		expect(
+			ctx.logs.info.some((l) => /\[preserved\].*network.*prod/.test(l)),
+		).toBe(true);
+	});
+
+	it("--legacy reports [preserved] when the preserved Terraspace key exists", async () => {
+		const ctx = createMockContext({
+			engine: "tofu",
+			files: {
+				"subspace.toml": LEGACY_MIGRATION_TOML,
+				"app/stacks/network/main.tf": "",
+				"app/stacks/network/tfvars/prod.tfvars": "",
+			},
+			execHandler: stsAnd((_cmd, args) => {
+				if (args[0] === "s3api" && args[1] === "head-object") {
+					return { stdout: "{}", stderr: "", exitCode: 0 };
+				}
+				return { stdout: "", stderr: "", exitCode: 0 };
+			}),
+		});
+
+		await runDoctor(ctx, { legacy: true });
+
+		expect(
+			ctx.logs.info.some((l) => /\[preserved\].*network.*prod/.test(l)),
+		).toBe(true);
+	});
+
+	it("--legacy reports [missing] when neither key exists", async () => {
+		const ctx = createMockContext({
+			engine: "tofu",
+			files: {
+				"subspace.toml": LEGACY_MIGRATION_TOML,
+				"app/stacks/network/main.tf": "",
+				"app/stacks/network/tfvars/prod.tfvars": "",
+			},
+			execHandler: stsAnd((_cmd, args) => {
+				if (args[0] === "s3api" && args[1] === "head-object") {
+					return { stdout: "", stderr: "Not Found", exitCode: 255 };
+				}
+				return { stdout: "", stderr: "", exitCode: 0 };
+			}),
+		});
+
+		await runDoctor(ctx, { legacy: true });
+
+		expect(
+			ctx.logs.info.some((l) => /\[missing\].*network.*prod/.test(l)),
+		).toBe(true);
+	});
+
+	it("--legacy mixes [preserved] and [missing] per tuple across stacks", async () => {
+		const ctx = createMockContext({
+			engine: "tofu",
+			files: {
+				"subspace.toml": LEGACY_MIGRATION_TOML,
+				"app/stacks/network/main.tf": "",
+				"app/stacks/network/tfvars/prod.tfvars": "",
+				"app/stacks/compute/main.tf": "",
+				"app/stacks/compute/tfvars/prod.tfvars": "",
+			},
+			execHandler: stsAnd((_cmd, args) => {
+				if (args[0] === "s3api" && args[1] === "head-object") {
+					const key =
+						args.find((a) => a.startsWith("--key="))?.slice(6) ?? "";
+					if (key.includes("compute")) {
+						return { stdout: "", stderr: "Not Found", exitCode: 255 };
+					}
+					return { stdout: "{}", stderr: "", exitCode: 0 };
+				}
+				return { stdout: "", stderr: "", exitCode: 0 };
+			}),
+		});
+
+		await runDoctor(ctx, { legacy: true });
+
+		expect(ctx.logs.info.some((l) => /\[preserved\].*network/.test(l))).toBe(
+			true,
+		);
+		expect(ctx.logs.info.some((l) => /\[missing\].*compute/.test(l))).toBe(
+			true,
+		);
 	});
 
 	it("lists stacks and checks for base.tfvars", async () => {

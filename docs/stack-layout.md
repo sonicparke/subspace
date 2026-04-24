@@ -18,35 +18,40 @@ app/stacks/<stack>/tfvars/
 
 ## Emitted Working Directory
 
-Subspace always runs OpenTofu/Terraform from an emitted directory:
+Subspace always runs OpenTofu/Terraform from an emitted per-stack working directory. The build root contains `stacks/` and `modules/` as siblings (Terraspace-style), so that user `source = "../../modules/<name>"` references resolve without any source rewriting.
 
 ```
-.subspace/build/<stack>/<region>/<env-or-noenv>/
+.subspace/build/<stack>/<region>/<env-or-noenv>/       <- build root
+├── stacks/<stack>/                                    <- engine chdir target
+└── modules/<name>/                                    <- only modules referenced by this stack
 ```
 
-If `ENV` is omitted, Subspace uses the sentinel directory:
+If `ENV` is omitted, Subspace uses the sentinel directory name `__noenv__`:
 
 ```
-.subspace/build/<stack>/<region>/__noenv__/
+.subspace/build/<stack>/<region>/__noenv__/stacks/<stack>/
 ```
 
-Subspace performs a clean rebuild of the emitted directory on each command invocation.
+Subspace performs a clean rebuild of the per-stack working directory and a full wipe+repopulate of `modules/` on each command invocation.
 
-## Clean Rebuild Rules (v0)
+## Clean Rebuild Rules
 
-When materializing `app/stacks/<stack>` into `.subspace/build/...`:
+When materializing `app/stacks/<stack>` + referenced `app/modules/<name>/` into `.subspace/build/...`:
 
-1. Delete everything inside the emitted directory **except** the following (preserved across rebuilds):
+1. Under `<buildRoot>/stacks/<stack>/`, delete everything **except** the following (preserved across rebuilds):
    - `.terraform/` (provider cache and backend state)
    - `.terraform.lock.hcl` (dependency lock file)
    - `terraform.tfstate` (local backend state, if present)
    - `terraform.tfstate.backup` (local backend state backup, if present)
-2. Recursively copy all stack source files and directories into the emitted dir.
+2. Recursively copy all stack source files and directories into `<buildRoot>/stacks/<stack>/`.
 3. Do **not** copy:
    - `.terraform/` (excluded from source copy; the preserved copy stays in place)
    - `.subspace/` (build output must not nest)
    - `tfvars/` (Subspace writes layered var files into the emitted root module)
-4. Write layered `*.auto.tfvars` files into the emitted directory root.
+4. Write layered `*.auto.tfvars` and generated `providers.tf` into `<buildRoot>/stacks/<stack>/`.
+5. Wipe `<buildRoot>/modules/` and copy each distinct module referenced by any `.tf` file in the staged stack (or any transitively referenced module) from `app/modules/<name>/` into `<buildRoot>/modules/<name>/`.
+   - Module discovery matches `source = "(./|../)+modules/<name>"` (line-level; `#` and `//` commented-out lines are ignored).
+   - A referenced module that does not exist at `app/modules/<name>/` causes a fast-fail error.
 
 Note: concurrent runs against the same stack+env combination are unsupported.
 
@@ -82,8 +87,8 @@ Notes:
 Subspace runs the engine with `-chdir`:
 
 ```bash
-tofu -chdir=.subspace/build/<stack>/<region>/<env-or-noenv> plan
-terraform -chdir=.subspace/build/<stack>/<region>/<env-or-noenv> apply
+tofu -chdir=.subspace/build/<stack>/<region>/<env-or-noenv>/stacks/<stack> plan
+terraform -chdir=.subspace/build/<stack>/<region>/<env-or-noenv>/stacks/<stack> apply
 ```
 
 Engine-specific args are always passed after `--` at the Subspace CLI level.

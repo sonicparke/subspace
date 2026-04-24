@@ -184,12 +184,13 @@ describe("CLI integration", () => {
 
 		await run("plan teststack", { cwd: tmpDir });
 
-		// Check build dir was created
-		const buildDir = join(tmpDir, ".subspace/build/teststack/global/__noenv__");
+		const buildDir = join(
+			tmpDir,
+			".subspace/build/teststack/global/__noenv__/stacks/teststack",
+		);
 		const entries = await readdir(buildDir);
 		expect(entries).toContain("main.tf");
 		expect(entries).toContain("00-base.auto.tfvars");
-		// tfvars/ should NOT be copied
 		expect(entries).not.toContain("tfvars");
 	});
 
@@ -205,7 +206,10 @@ describe("CLI integration", () => {
 
 		await run("plan mystack prod", { cwd: tmpDir });
 
-		const buildDir = join(tmpDir, ".subspace/build/mystack/global/prod");
+		const buildDir = join(
+			tmpDir,
+			".subspace/build/mystack/global/prod/stacks/mystack",
+		);
 		const entries = await readdir(buildDir);
 		expect(entries).toContain("main.tf");
 		expect(entries).toContain("00-base.auto.tfvars");
@@ -231,7 +235,10 @@ describe("CLI integration", () => {
 		const result = await run("plan --stack flagstack --env prod", { cwd: tmpDir });
 		expect(result.exitCode).toBe(0);
 
-		const buildDir = join(tmpDir, ".subspace/build/flagstack/global/prod");
+		const buildDir = join(
+			tmpDir,
+			".subspace/build/flagstack/global/prod/stacks/flagstack",
+		);
 		const entries = await readdir(buildDir);
 		expect(entries).toContain("main.tf");
 		expect(entries).toContain("10-env.auto.tfvars");

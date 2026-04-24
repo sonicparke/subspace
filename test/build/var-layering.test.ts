@@ -117,4 +117,42 @@ describe("writeVarLayers", () => {
 		expect(ctx.files["build/90-local.auto.tfvars"]).toBe("d");
 		expect(ctx.files["build/95-env-local.auto.tfvars"]).toBe("e");
 	});
+
+	it("layers multiple tfvars roots for Terraspace migrations", async () => {
+		const ctx = createMockContext({
+			files: {
+				"config/terraform/tfvars/base.tfvars": "project_base = true",
+				"config/terraform/tfvars/prod.tfvars": "project_env = true",
+				"config/stacks/mystack/tfvars/base.tfvars": "stack_cfg_base = true",
+				"config/stacks/mystack/tfvars/prod.tfvars": "stack_cfg_env = true",
+				"app/stacks/mystack/tfvars/base.tfvars": "stack_base = true",
+				"app/stacks/mystack/tfvars/prod.tfvars": "stack_env = true",
+			},
+		});
+
+		await writeVarLayers(ctx, "app/stacks/mystack", "build", "prod", [
+			{ dir: "config/terraform/tfvars", label: "project" },
+			{ dir: "config/stacks/mystack/tfvars", label: "stack-config" },
+			{ dir: "app/stacks/mystack/tfvars", label: "stack" },
+		]);
+
+		expect(ctx.files["build/00-project-base.auto.tfvars"]).toBe(
+			"project_base = true",
+		);
+		expect(ctx.files["build/01-project-env.auto.tfvars"]).toBe(
+			"project_env = true",
+		);
+		expect(ctx.files["build/05-stack-config-base.auto.tfvars"]).toBe(
+			"stack_cfg_base = true",
+		);
+		expect(ctx.files["build/06-stack-config-env.auto.tfvars"]).toBe(
+			"stack_cfg_env = true",
+		);
+		expect(ctx.files["build/10-stack-base.auto.tfvars"]).toBe(
+			"stack_base = true",
+		);
+		expect(ctx.files["build/11-stack-env.auto.tfvars"]).toBe(
+			"stack_env = true",
+		);
+	});
 });

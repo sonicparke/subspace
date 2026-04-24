@@ -6,10 +6,10 @@ import { detectEngine } from "../engine/detect.js";
 
 const execFileAsync = promisify(execFileCb);
 
-export type WorkflowCommandName = "plan" | "apply" | "destroy";
+export type WorkflowCommandName = "plan" | "apply" | "destroy" | "show";
 
 export type ParsedArgv =
-	| { command: "doctor" }
+	| { command: "doctor"; legacy: boolean }
 	| { command: WorkflowCommandName; stack?: string; env?: string }
 	| {
 			command: "new";
@@ -19,7 +19,34 @@ export type ParsedArgv =
 			arg4?: string;
 			arg5?: string;
 	  }
+	| ParsedMigrateArgv
 	| undefined;
+
+export type ParsedMigrateArgv =
+	| {
+			command: "migrate";
+			subcommand: "init";
+			legacyPath?: string;
+			out?: string;
+			regions?: string[];
+			appName?: string;
+			role?: string;
+			force: boolean;
+			dryRun: boolean;
+	  }
+	| {
+			command: "migrate";
+			subcommand: "stack";
+			stack?: string;
+			env?: string;
+			/** Legacy key :ROLE (Terraspace TS_ROLE). */
+			role?: string;
+			/** Legacy key :APP (Terraspace TS_APP). */
+			app?: string;
+			dryRun: boolean;
+			reportFile?: string;
+			regions?: string[];
+	  };
 
 export interface CliRuntime {
 	rawArgv: string[];
@@ -33,6 +60,7 @@ const ENGINE_OPTIONAL_COMMANDS = new Set([
 	undefined,
 	"doctor",
 	"new",
+	"migrate",
 	"help",
 	"--help",
 	"-h",
@@ -85,10 +113,11 @@ export function parseResolvedArgv(cliArgv: string[]): ParsedArgv {
 	const [command, ...rest] = cliArgv;
 	switch (command) {
 		case "doctor":
-			return { command };
+			return { command, legacy: rest.includes("--legacy") };
 		case "plan":
 		case "apply":
 		case "destroy":
+		case "show":
 			return parseWorkflowArgv(command, rest);
 		case "new": {
 			const [arg1, arg2, arg3, arg4, arg5] = rest;
@@ -104,9 +133,169 @@ export function parseResolvedArgv(cliArgv: string[]): ParsedArgv {
 				arg5,
 			};
 		}
+		case "migrate":
+			return parseMigrateArgv(rest);
 		default:
 			throw new Error(`unsupported command "${command ?? ""}"`);
 	}
+}
+
+function parseMigrateArgv(args: string[]): ParsedMigrateArgv {
+	if (args[0] === "init") {
+		return parseMigrateInitArgv(args.slice(1));
+	}
+	return parseMigrateStackArgv(args);
+}
+
+function parseMigrateInitArgv(
+	args: string[],
+): Extract<ParsedMigrateArgv, { subcommand: "init" }> {
+	const positionals: string[] = [];
+	let out: string | undefined;
+	let regions: string[] | undefined;
+	let appName: string | undefined;
+	let role: string | undefined;
+	let force = false;
+	let dryRun = false;
+
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i];
+		if (arg === "--dry-run") {
+			dryRun = true;
+			continue;
+		}
+		if (arg === "--out") {
+			out = args[i + 1];
+			i += 1;
+			continue;
+		}
+		if (arg.startsWith("--out=")) {
+			out = arg.slice("--out=".length);
+			continue;
+		}
+		if (arg === "--regions") {
+			regions = splitRegions(args[i + 1]);
+			i += 1;
+			continue;
+		}
+		if (arg.startsWith("--regions=")) {
+			regions = splitRegions(arg.slice("--regions=".length));
+			continue;
+		}
+		if (arg === "--app-name") {
+			appName = args[i + 1];
+			i += 1;
+			continue;
+		}
+		if (arg.startsWith("--app-name=")) {
+			appName = arg.slice("--app-name=".length);
+			continue;
+		}
+		if (arg === "--role") {
+			role = args[i + 1];
+			i += 1;
+			continue;
+		}
+		if (arg.startsWith("--role=")) {
+			role = arg.slice("--role=".length);
+			continue;
+		}
+		if (arg === "--force") {
+			force = true;
+			continue;
+		}
+		if (arg.startsWith("-")) continue;
+		positionals.push(arg);
+	}
+
+	return {
+		command: "migrate",
+		subcommand: "init",
+		legacyPath: positionals[0],
+		out,
+		regions,
+		appName,
+		role,
+		force,
+		dryRun,
+	};
+}
+
+function parseMigrateStackArgv(
+	args: string[],
+): Extract<ParsedMigrateArgv, { subcommand: "stack" }> {
+	const positionals: string[] = [];
+	let dryRun = false;
+	let reportFile: string | undefined;
+	let regions: string[] | undefined;
+	let role: string | undefined;
+	let app: string | undefined;
+
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i];
+		if (arg === "--dry-run") {
+			dryRun = true;
+			continue;
+		}
+		if (arg === "--report-file") {
+			reportFile = args[i + 1];
+			i += 1;
+			continue;
+		}
+		if (arg.startsWith("--report-file=")) {
+			reportFile = arg.slice("--report-file=".length);
+			continue;
+		}
+		if (arg === "--regions") {
+			regions = splitRegions(args[i + 1]);
+			i += 1;
+			continue;
+		}
+		if (arg.startsWith("--regions=")) {
+			regions = splitRegions(arg.slice("--regions=".length));
+			continue;
+		}
+		if (arg === "--role") {
+			role = args[i + 1];
+			i += 1;
+			continue;
+		}
+		if (arg.startsWith("--role=")) {
+			role = arg.slice("--role=".length);
+			continue;
+		}
+		if (arg === "--app") {
+			app = args[i + 1];
+			i += 1;
+			continue;
+		}
+		if (arg.startsWith("--app=")) {
+			app = arg.slice("--app=".length);
+			continue;
+		}
+		if (arg.startsWith("-")) continue;
+		positionals.push(arg);
+	}
+
+	return {
+		command: "migrate",
+		subcommand: "stack",
+		stack: positionals[0],
+		env: positionals[1],
+		role,
+		app,
+		dryRun,
+		reportFile,
+		regions,
+	};
+}
+
+function splitRegions(raw: string | undefined): string[] | undefined {
+	if (!raw) return undefined;
+	return raw
+		.split(",")
+		.map((r) => r.trim())
+		.filter(Boolean);
 }
 
 function parseWorkflowArgv(
@@ -138,7 +327,12 @@ function parseWorkflowArgv(
 
 function normalizeOscliArgv(cliArgv: string[]): string[] {
 	const [command, ...rest] = cliArgv;
-	if (command !== "plan" && command !== "apply" && command !== "destroy") {
+	if (
+		command !== "plan" &&
+		command !== "apply" &&
+		command !== "destroy" &&
+		command !== "show"
+	) {
 		return cliArgv;
 	}
 
@@ -186,5 +380,16 @@ export function assertNewCommand(
 ): asserts parsed is Exclude<Extract<ParsedArgv, { command: "new" }>, undefined> {
 	if (!parsed || parsed.command !== "new") {
 		throw new Error('expected "new" command');
+	}
+}
+
+export function assertMigrateCommand(
+	parsed: ParsedArgv,
+): asserts parsed is Exclude<
+	Extract<ParsedArgv, { command: "migrate" }>,
+	undefined
+> {
+	if (!parsed || parsed.command !== "migrate") {
+		throw new Error('expected "migrate" command');
 	}
 }

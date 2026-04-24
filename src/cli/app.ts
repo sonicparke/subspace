@@ -2,14 +2,18 @@ import { createCLI } from "@oscli-dev/oscli";
 import { runApply } from "../commands/apply.js";
 import { runDestroy } from "../commands/destroy.js";
 import { runDoctor } from "../commands/doctor.js";
+import { runMigrateInit } from "../commands/migrate-init.js";
+import { runMigrateStack } from "../commands/migrate-stack.js";
 import { runNew } from "../commands/new.js";
 import { runPlan } from "../commands/plan.js";
+import { runShow } from "../commands/show.js";
 import type { BackendType } from "../domain/backends.js";
 import {
 	recommendedProviderForBackend,
 	type ProviderType,
 } from "../domain/providers.js";
 import {
+	assertMigrateCommand,
 	assertNewCommand,
 	assertWorkflowCommand,
 	type CliRuntime,
@@ -32,17 +36,64 @@ export function createSubspaceCli(runtime: CliRuntime) {
 	const cli = buildCli();
 
 	cli.command("doctor", async () => {
-		await exitOnFailure(runDoctor(runtime.ctx));
+		const legacy =
+			runtime.parsed?.command === "doctor" ? runtime.parsed.legacy : false;
+		await exitOnFailure(runDoctor(runtime.ctx, { legacy }));
 	});
 
 	registerWorkflowCommand(cli, runtime, "plan", runPlan);
 	registerWorkflowCommand(cli, runtime, "apply", runApply);
 	registerWorkflowCommand(cli, runtime, "destroy", runDestroy);
+	registerWorkflowCommand(cli, runtime, "show", runShow);
 
 	cli.command("new [generator] [name] [arg3] [arg4] [arg5]", async () => {
 		assertNewCommand(runtime.parsed);
 		const normalized = await resolveNewInput(cli, runtime.parsed);
 		await exitOnFailure(runNew(runtime.ctx, normalized));
+	});
+
+	cli.command("migrate [arg1] [arg2]", async () => {
+		assertMigrateCommand(runtime.parsed);
+		const parsed = runtime.parsed;
+
+		if (parsed.subcommand === "init") {
+			const legacyPath = parsed.legacyPath ?? ".";
+			const result = await runMigrateInit(runtime.ctx, {
+				legacyPath,
+				out: parsed.out,
+				regions: parsed.regions,
+				appName: parsed.appName,
+				role: cli.flags.role ?? parsed.role,
+				force: parsed.force,
+				dryRun: parsed.dryRun,
+			});
+			runtime.ctx.log.info(result.report);
+			const okStatuses = new Set(["ok", "dry-run"]);
+			if (!okStatuses.has(result.status)) process.exit(1);
+			return;
+		}
+
+		if (!parsed.stack) {
+			cli.exit('Missing required stack for "migrate".', {
+				code: "usage",
+				hint: "Use `subspace migrate <stack> [env] --dry-run` (omit `env` to probe every env for that stack) or `subspace migrate init <path>`.",
+			});
+		}
+		const result = await runMigrateStack(runtime.ctx, {
+			stack: parsed.stack,
+			env: parsed.env,
+			role: cli.flags.role ?? parsed.role,
+			app: cli.flags.app ?? parsed.app,
+			dryRun: parsed.dryRun,
+			regions: parsed.regions,
+		});
+		if (parsed.reportFile) {
+			await runtime.ctx.fs.writeFile(parsed.reportFile, result.report);
+			runtime.ctx.log.info(`Report written to ${parsed.reportFile}`);
+		} else {
+			runtime.ctx.log.info(result.report);
+		}
+		if (result.status !== "ok") process.exit(1);
 	});
 
 	return cli;
@@ -60,6 +111,17 @@ function buildCli() {
 			backend: b.flag().string().label("Backend").optional(),
 			provider: b.flag().string().label("Provider").optional(),
 			region: b.flag().string().label("Region").optional(),
+			"dry-run": b.flag().boolean().label("Dry run").optional(),
+			legacy: b.flag().boolean().label("Legacy migration report").optional(),
+			"report-file": b.flag().string().label("Report file").optional(),
+			"app-name": b.flag().string().label("App name").optional(),
+			/** Legacy S3 key :ROLE; Terraspace `TS_ROLE`. */
+			role: b.flag().string().label("TS_ROLE").optional(),
+			/** Legacy S3 key :APP; Terraspace `TS_APP`. */
+			app: b.flag().string().label("TS_APP").optional(),
+			regions: b.flag().string().label("Regions (comma-separated)").optional(),
+			out: b.flag().string().label("Output directory").optional(),
+			force: b.flag().boolean().label("Force overwrite").optional(),
 		},
 		prompts: {
 			generator: b
@@ -129,7 +191,7 @@ function buildCli() {
 function registerWorkflowCommand(
 	cli: SubspaceCli,
 	runtime: CliRuntime,
-	command: "plan" | "apply" | "destroy",
+	command: "plan" | "apply" | "destroy" | "show",
 	handler: (
 		ctx: CliRuntime["ctx"],
 		input: WorkflowInput,
