@@ -1,5 +1,8 @@
 import { loadProjectConfig } from "../config/project.js";
+import { loadStackConfig, saveStackConfig } from "../config/stack-config.js";
+import type { StackConfig } from "../config/stack-schema.js";
 import type { SubspaceContext } from "../context.js";
+import { awsProfileArgs } from "../migrate/aws-cli.js";
 import { loadMigrationConfig } from "../migrate/config.js";
 import {
 	copyLegacyToNative,
@@ -10,6 +13,7 @@ import {
 	type MigrationPlan,
 	type MigrationPlanEntry,
 } from "../migrate/terraspace/plan.js";
+import { nativeNameFromLegacyKey } from "../migrate/terraspace/key.js";
 import { discoverTerraspaceEnvsForStack } from "../migrate/terraspace/discover.js";
 import {
 	probeStateObjects,
@@ -23,6 +27,18 @@ export interface MigrateStackInput {
 	role?: string;
 	/** Legacy `:APP` (Terraspace TS_APP); overrides [migration.terraspace].app. */
 	app?: string;
+	/** Terraspace stack instance used to derive `:BUILD_DIR`; overrides [migration.terraspace].instance. */
+	instance?: string;
+	/** Native state identity used after migration. */
+	name?: string;
+	/** Prompt adapter used only when multiple native-name candidates are discovered. */
+	chooseName?: (input: {
+		stack: string;
+		envs: string[];
+		candidates: string[];
+	}) => Promise<string | undefined>;
+	/** AWS CLI profile for migration probes/copies. */
+	profile?: string;
 	/**
 	 * When true, the report is framed as a preview ("dry-run").
 	 * When false, Subspace applies repo-side migration behavior, but keeps
@@ -37,6 +53,7 @@ export type MigrateStackStatus =
 	| "no-migration-config"
 	| "no-account"
 	| "env-required"
+	| "name-required"
 	| "non-s3-backend";
 
 export interface MigrateStackResult {
@@ -77,7 +94,7 @@ export async function runMigrateStack(
 
 	const envs = input.env
 		? [input.env]
-		: mergeDiscoveredEnvsWithConfig(
+		: resolveEnvCandidates(
 				await discoverTerraspaceEnvsForStack(ctx, ".", input.stack),
 				ts.envs,
 			);
@@ -95,16 +112,18 @@ export async function runMigrateStack(
 		};
 	}
 
-	const account = await resolveAwsAccount(ctx);
+	const account = await resolveAwsAccount(ctx, input.profile);
 	if (!account) {
+		const debugCommand = input.profile
+			? `aws sts get-caller-identity --profile ${input.profile}`
+			: "aws sts get-caller-identity";
 		return {
 			status: "no-account",
-			report:
-				"Could not determine AWS account id. Run `aws sts get-caller-identity` to debug.",
+			report: `Could not determine AWS account id. Run \`${debugCommand}\` to debug.`,
 		};
 	}
 
-	const plan = buildMigrationPlan({
+	const basePlanInput = {
 		stacks: [input.stack],
 		envs,
 		regions,
@@ -114,12 +133,34 @@ export async function runMigrateStack(
 		appName: ts.appName,
 		role: input.role ?? ts.role,
 		app: input.app ?? ts.app,
+		instance: input.instance ?? ts.instance,
+	};
+	const preliminaryPlan = buildMigrationPlan(basePlanInput);
+	const name = await resolveNativeName({
+		stack: input.stack,
+		envs,
+		explicitName: input.name,
+		plan: preliminaryPlan,
+		chooseName: input.chooseName,
 	});
+	if (!name) {
+		return {
+			status: "name-required",
+			report:
+				`Multiple legacy states found for "${input.stack}".\n\n` +
+				`Re-run with \`--name <name>\`, or run interactively to choose one.`,
+		};
+	}
 
-	const probe = await probeStateObjects(ctx, plan);
+	const plan = buildMigrationPlan({ ...basePlanInput, name });
+
+	const probe = await probeStateObjects(ctx, plan, { profile: input.profile });
 	const execution = input.dryRun
 		? undefined
-		: await executeMigrationCopies(ctx, plan);
+		: await executeMigrationCopies(ctx, plan, input.profile);
+	if (execution) {
+		await persistNativeStateMappings(ctx, input.stack, execution);
+	}
 
 	return {
 		status: "ok",
@@ -129,11 +170,13 @@ export async function runMigrateStack(
 
 async function resolveAwsAccount(
 	ctx: SubspaceContext,
+	profile: string | undefined,
 ): Promise<string | null> {
 	const result = await ctx.exec("aws", [
 		"sts",
 		"get-caller-identity",
 		"--output=json",
+		...awsProfileArgs({ profile }),
 	]);
 	if (result.exitCode !== 0) return null;
 	try {
@@ -144,15 +187,44 @@ async function resolveAwsAccount(
 	}
 }
 
-function mergeDiscoveredEnvsWithConfig(
+function resolveEnvCandidates(
 	discovered: string[],
 	fromToml: string[] | undefined,
 ): string[] {
-	const out = new Set<string>([...discovered]);
-	for (const e of fromToml ?? []) {
-		if (e) out.add(e);
-	}
-	return Array.from(out).sort();
+	if (discovered.length > 0) return discovered;
+	return (fromToml ?? []).filter(Boolean).sort();
+}
+
+async function resolveNativeName(input: {
+	stack: string;
+	envs: string[];
+	explicitName: string | undefined;
+	plan: MigrationPlan;
+	chooseName:
+		| ((input: {
+				stack: string;
+				envs: string[];
+				candidates: string[];
+		  }) => Promise<string | undefined>)
+		| undefined;
+}): Promise<string | undefined> {
+	if (input.explicitName) return input.explicitName;
+
+	const candidates = Array.from(
+		new Set(
+			input.plan.entries
+				.map((entry) => nativeNameFromLegacyKey(input.stack, entry.legacy.key))
+				.filter((name): name is string => Boolean(name)),
+		),
+	).sort();
+
+	if (candidates.length === 0) return "default";
+	if (candidates.length === 1) return candidates[0];
+	return input.chooseName?.({
+		stack: input.stack,
+		envs: input.envs,
+		candidates,
+	});
 }
 
 function renderNoMigrationConfig(): string {
@@ -246,7 +318,9 @@ function renderReport(
 		lines.push(``);
 		lines.push(ONE_WAY_NOTICE);
 	} else {
-		lines.push(`Migration applied for this report. Remote state location was unchanged.`);
+		lines.push(
+			`Migration applied for this report. Legacy state was copied to native state when needed.`,
+		);
 		lines.push(``);
 		lines.push(ONE_WAY_NOTICE);
 	}
@@ -256,6 +330,7 @@ function renderReport(
 async function executeMigrationCopies(
 	ctx: SubspaceContext,
 	plan: MigrationPlan,
+	profile: string | undefined,
 ): Promise<Array<{ entry: MigrationPlanEntry; result: CopyLegacyToNativeResult }>> {
 	const results: Array<{
 		entry: MigrationPlanEntry;
@@ -264,13 +339,47 @@ async function executeMigrationCopies(
 	for (const entry of plan.entries) {
 		results.push({
 			entry,
-			result: await copyLegacyToNative(ctx, {
-				legacy: entry.legacy,
-				native: entry.native,
-			}),
+			result: await copyLegacyToNative(
+				ctx,
+				{
+					legacy: entry.legacy,
+					native: entry.native,
+				},
+				{ profile },
+			),
 		});
 	}
 	return results;
+}
+
+async function persistNativeStateMappings(
+	ctx: SubspaceContext,
+	stack: string,
+	execution: Array<{ entry: MigrationPlanEntry; result: CopyLegacyToNativeResult }>,
+): Promise<void> {
+	const successful = execution.filter(({ result }) =>
+		result.status === "copied" || result.status === "native-exists",
+	);
+	if (successful.length === 0) return;
+
+	const existing = await loadStackConfig(ctx, stack);
+	const config = existing ?? defaultStackConfig(stack);
+	config.migration ??= {};
+	config.migration.native_state ??= {};
+
+	for (const { entry } of successful) {
+		config.migration.native_state[entry.env || "__noenv__"] = entry.name;
+	}
+
+	await saveStackConfig(ctx, stack, config);
+}
+
+function defaultStackConfig(stack: string): StackConfig {
+	return {
+		stack: { name: stack, provider: "aws" },
+		regions: { values: [] },
+		provider: { settings: {} },
+	};
 }
 
 function formatCopyResult(
@@ -292,4 +401,4 @@ function formatCopyResult(
 }
 
 const ONE_WAY_NOTICE =
-	`**Remote state is preserved.** Subspace keeps using the existing Terraspace bucket/key for this migration path, so repo migration does not relocate the state object.`;
+	`**Legacy state is preserved.** Subspace writes migrated state to the native destination and does not delete the legacy object.`;

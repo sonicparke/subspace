@@ -24,6 +24,7 @@ describe("parseResolvedArgv() — migrate init", () => {
 			regions: undefined,
 			appName: undefined,
 			role: undefined,
+			profile: undefined,
 			force: false,
 			dryRun: false,
 		});
@@ -136,6 +137,9 @@ describe("parseResolvedArgv() — migrate <stack> [env]", () => {
 			env: undefined,
 			role: undefined,
 			app: undefined,
+			instance: undefined,
+			name: undefined,
+			profile: undefined,
 			dryRun: false,
 			reportFile: undefined,
 			regions: undefined,
@@ -213,6 +217,79 @@ describe("parseResolvedArgv() — migrate <stack> [env]", () => {
 			stack: "key-pair",
 			env: "k6-lnp",
 			role: "cost",
+		});
+	});
+
+	it("parses `--profile` for AWS CLI calls", () => {
+		const parsed = parseResolvedArgv([
+			"migrate",
+			"cost-engine-ecs",
+			"--profile",
+			"vnh",
+		]);
+		expect(parsed).toMatchObject({
+			subcommand: "stack",
+			stack: "cost-engine-ecs",
+			profile: "vnh",
+		});
+	});
+
+	it("parses `--profile=<name>` for AWS CLI calls", () => {
+		const parsed = parseResolvedArgv([
+			"migrate",
+			"cost-engine-ecs",
+			"--profile=vnh",
+		]);
+		expect(parsed).toMatchObject({
+			subcommand: "stack",
+			stack: "cost-engine-ecs",
+			profile: "vnh",
+		});
+	});
+
+	it("parses `--instance` for Terraspace stack instances", () => {
+		const parsed = parseResolvedArgv([
+			"migrate",
+			"cost-engine-ecs",
+			"qa",
+			"--app",
+			"costengine",
+			"--instance",
+			"costengine",
+		]);
+		expect(parsed).toMatchObject({
+			subcommand: "stack",
+			stack: "cost-engine-ecs",
+			env: "qa",
+			app: "costengine",
+			instance: "costengine",
+		});
+	});
+
+	it("parses `--name` for native state identity", () => {
+		const parsed = parseResolvedArgv([
+			"migrate",
+			"key-pair",
+			"--name",
+			"vnh",
+		]);
+		expect(parsed).toMatchObject({
+			subcommand: "stack",
+			stack: "key-pair",
+			name: "vnh",
+		});
+	});
+
+	it("parses `--name=<value>` for native state identity", () => {
+		const parsed = parseResolvedArgv([
+			"migrate",
+			"key-pair",
+			"--name=vnh",
+		]);
+		expect(parsed).toMatchObject({
+			subcommand: "stack",
+			stack: "key-pair",
+			name: "vnh",
 		});
 	});
 

@@ -1,4 +1,5 @@
 import type { SubspaceContext } from "../../context.js";
+import { awsProfileArgs, type AwsCliOptions } from "../aws-cli.js";
 import type { MigrationPlan, MigrationPlanEntry } from "./plan.js";
 
 export type ProbeStatus = "found" | "missing" | "error";
@@ -21,12 +22,13 @@ export interface ProbeReport {
 export async function probeStateObjects(
 	ctx: SubspaceContext,
 	plan: MigrationPlan,
+	options?: AwsCliOptions,
 ): Promise<ProbeReport> {
 	const results: ProbeResult[] = [];
 	for (const entry of plan.entries) {
 		const [legacy, native] = await Promise.all([
-			headObject(ctx, entry.legacy.bucket, entry.legacy.key),
-			headObject(ctx, entry.native.bucket, entry.native.key),
+			headObject(ctx, entry.legacy.bucket, entry.legacy.key, options),
+			headObject(ctx, entry.native.bucket, entry.native.key, options),
 		]);
 		results.push({ entry, legacy, native });
 	}
@@ -37,6 +39,7 @@ export async function headObject(
 	ctx: SubspaceContext,
 	bucket: string,
 	key: string,
+	options?: AwsCliOptions,
 ): Promise<ProbeOutcome> {
 	const result = await ctx.exec("aws", [
 		"s3api",
@@ -44,6 +47,7 @@ export async function headObject(
 		`--bucket=${bucket}`,
 		`--key=${key}`,
 		"--output=json",
+		...awsProfileArgs(options),
 	]);
 	if (result.exitCode === 0) return { status: "found" };
 	if (isNotFound(result.stderr)) return { status: "missing" };

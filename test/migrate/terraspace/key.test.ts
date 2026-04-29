@@ -3,6 +3,7 @@ import {
 	buildDirOf,
 	expand,
 	expandBackendKey,
+	nativeNameFromLegacyKey,
 	withDerivedVars,
 } from "../../../src/migrate/terraspace/key.js";
 
@@ -196,13 +197,42 @@ describe("buildDirOf()", () => {
 		expect(buildDirOf("stacks", "network")).toBe("stacks/network");
 	});
 
-	it("appends instance with a hyphen when provided", () => {
-		expect(buildDirOf("stacks", "network", "blue")).toBe("stacks/network-blue");
+	it("appends instance with a dot when provided", () => {
+		expect(buildDirOf("stacks", "network", "blue")).toBe("stacks/network.blue");
 	});
 
 	it("omits empty segments", () => {
 		expect(buildDirOf(undefined, "network")).toBe("network");
 		expect(buildDirOf("stacks", undefined)).toBe("stacks");
+	});
+});
+
+describe("nativeNameFromLegacyKey()", () => {
+	it("uses the Terraspace stack instance as the native name", () => {
+		expect(
+			nativeNameFromLegacyKey(
+				"cost-engine-ecs",
+				"main/us-east-1/qa/costengine/stacks/cost-engine-ecs.costengine/terraform.tfstate",
+			),
+		).toBe("costengine");
+	});
+
+	it("uses default for non-instanced legacy stack keys", () => {
+		expect(
+			nativeNameFromLegacyKey(
+				"network",
+				"main/us-east-1/qa/stacks/network/terraform.tfstate",
+			),
+		).toBe("default");
+	});
+
+	it("returns null when the key does not describe the requested stack", () => {
+		expect(
+			nativeNameFromLegacyKey(
+				"network",
+				"main/us-east-1/qa/stacks/compute.worker/terraform.tfstate",
+			),
+		).toBeNull();
 	});
 });
 
@@ -258,6 +288,25 @@ describe("expandBackendKey()", () => {
 				instance: "blue",
 			},
 		);
-		expect(key).toBe("us-east-1/prod/stacks/network-blue/terraform.tfstate");
+		expect(key).toBe("us-east-1/prod/stacks/network.blue/terraform.tfstate");
+	});
+
+	it("matches cost-engine-ecs Terraspace instance key shape", () => {
+		const key = expandBackendKey(
+			":PROJECT/:REGION/:ENV/:APP/:BUILD_DIR/terraform.tfstate",
+			{
+				project: "main",
+				region: "us-east-1",
+				env: "qa",
+				app: "costengine",
+				type_dir: "stacks",
+				mod_name: "cost-engine-ecs",
+				instance: "costengine",
+			},
+		);
+
+		expect(key).toBe(
+			"main/us-east-1/qa/costengine/stacks/cost-engine-ecs.costengine/terraform.tfstate",
+		);
 	});
 });

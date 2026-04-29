@@ -13,11 +13,13 @@ describe("stack-config", () => {
 			stack: { name: "network", provider: "aws" },
 			regions: { values: ["us-east-1"], default: "us-east-1" },
 			provider: { settings: { region: "us-east-1" } },
+			migration: { native_state: { prod: "default" } },
 		});
 		const loaded = await loadStackConfig(ctx, "network");
 		expect(loaded?.stack.provider).toBe("aws");
 		expect(loaded?.regions.values).toEqual(["us-east-1"]);
 		expect(loaded?.provider.settings.region).toBe("us-east-1");
+		expect(loaded?.migration?.native_state?.prod).toBe("default");
 	});
 
 	it("returns null when stack config file does not exist", async () => {

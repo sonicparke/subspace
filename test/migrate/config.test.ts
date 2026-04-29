@@ -18,6 +18,7 @@ project = "main"
 regions = ["us-east-1", "us-west-2"]
 envs = [ "k6-lnp" ]
 role = "cost"
+instance = "costengine"
 app_name = "my-app"
 `;
 
@@ -42,6 +43,7 @@ describe("parseMigrationConfig", () => {
 		expect(cfg.terraspace?.regions).toEqual(["us-east-1", "us-west-2"]);
 		expect(cfg.terraspace?.envs).toEqual(["k6-lnp"]);
 		expect(cfg.terraspace?.role).toBe("cost");
+		expect(cfg.terraspace?.instance).toBe("costengine");
 		expect(cfg.terraspace?.appName).toBe("my-app");
 	});
 

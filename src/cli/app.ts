@@ -1,4 +1,6 @@
 import { createCLI } from "@oscli-dev/oscli";
+import { stdin as input, stdout as output } from "node:process";
+import { createInterface } from "node:readline/promises";
 import { runApply } from "../commands/apply.js";
 import { runDestroy } from "../commands/destroy.js";
 import { runDoctor } from "../commands/doctor.js";
@@ -84,6 +86,10 @@ export function createSubspaceCli(runtime: CliRuntime) {
 			env: parsed.env,
 			role: cli.flags.role ?? parsed.role,
 			app: cli.flags.app ?? parsed.app,
+			instance: cli.flags.instance ?? parsed.instance,
+			name: cli.flags.name ?? parsed.name,
+			chooseName: promptForNativeStateName,
+			profile: cli.flags.profile ?? parsed.profile,
 			dryRun: parsed.dryRun,
 			regions: parsed.regions,
 		});
@@ -97,6 +103,43 @@ export function createSubspaceCli(runtime: CliRuntime) {
 	});
 
 	return cli;
+}
+
+async function promptForNativeStateName({
+	stack,
+	envs,
+	candidates,
+}: {
+	stack: string;
+	envs: string[];
+	candidates: string[];
+}): Promise<string | undefined> {
+	if (!input.isTTY || !output.isTTY) return undefined;
+
+	output.write(
+		`Multiple legacy states found for ${stack}${envs.length ? ` (${envs.join(", ")})` : ""}.\n` +
+			"Which native state name should this become?\n",
+	);
+	candidates.forEach((candidate, index) => {
+		output.write(`  ${index + 1}. ${candidate}\n`);
+	});
+	output.write(`  ${candidates.length + 1}. custom...\n`);
+
+	const rl = createInterface({ input, output });
+	try {
+		const answer = (await rl.question("Select a name: ")).trim();
+		const selected = Number.parseInt(answer, 10);
+		if (Number.isInteger(selected) && selected >= 1 && selected <= candidates.length) {
+			return candidates[selected - 1];
+		}
+		if (selected === candidates.length + 1) {
+			const custom = (await rl.question("Native state name: ")).trim();
+			return custom || undefined;
+		}
+		return answer || undefined;
+	} finally {
+		rl.close();
+	}
 }
 
 function buildCli() {
@@ -119,6 +162,8 @@ function buildCli() {
 			role: b.flag().string().label("TS_ROLE").optional(),
 			/** Legacy S3 key :APP; Terraspace `TS_APP`. */
 			app: b.flag().string().label("TS_APP").optional(),
+			instance: b.flag().string().label("Terraspace stack instance").optional(),
+			profile: b.flag().string().label("AWS profile").optional(),
 			regions: b.flag().string().label("Regions (comma-separated)").optional(),
 			out: b.flag().string().label("Output directory").optional(),
 			force: b.flag().boolean().label("Force overwrite").optional(),

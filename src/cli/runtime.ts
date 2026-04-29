@@ -31,6 +31,7 @@ export type ParsedMigrateArgv =
 			regions?: string[];
 			appName?: string;
 			role?: string;
+			profile?: string;
 			force: boolean;
 			dryRun: boolean;
 	  }
@@ -43,6 +44,12 @@ export type ParsedMigrateArgv =
 			role?: string;
 			/** Legacy key :APP (Terraspace TS_APP). */
 			app?: string;
+			/** Terraspace stack instance for legacy `:BUILD_DIR`. */
+			instance?: string;
+			/** Native state identity used in migrated Subspace state paths. */
+			name?: string;
+			/** AWS CLI profile for migration probes/copies. */
+			profile?: string;
 			dryRun: boolean;
 			reportFile?: string;
 			regions?: string[];
@@ -155,6 +162,7 @@ function parseMigrateInitArgv(
 	let regions: string[] | undefined;
 	let appName: string | undefined;
 	let role: string | undefined;
+	let profile: string | undefined;
 	let force = false;
 	let dryRun = false;
 
@@ -200,6 +208,15 @@ function parseMigrateInitArgv(
 			role = arg.slice("--role=".length);
 			continue;
 		}
+		if (arg === "--profile") {
+			profile = args[i + 1];
+			i += 1;
+			continue;
+		}
+		if (arg.startsWith("--profile=")) {
+			profile = arg.slice("--profile=".length);
+			continue;
+		}
 		if (arg === "--force") {
 			force = true;
 			continue;
@@ -216,6 +233,7 @@ function parseMigrateInitArgv(
 		regions,
 		appName,
 		role,
+		profile,
 		force,
 		dryRun,
 	};
@@ -230,6 +248,9 @@ function parseMigrateStackArgv(
 	let regions: string[] | undefined;
 	let role: string | undefined;
 	let app: string | undefined;
+	let instance: string | undefined;
+	let name: string | undefined;
+	let profile: string | undefined;
 
 	for (let i = 0; i < args.length; i++) {
 		const arg = args[i];
@@ -273,6 +294,33 @@ function parseMigrateStackArgv(
 			app = arg.slice("--app=".length);
 			continue;
 		}
+		if (arg === "--instance") {
+			instance = args[i + 1];
+			i += 1;
+			continue;
+		}
+		if (arg.startsWith("--instance=")) {
+			instance = arg.slice("--instance=".length);
+			continue;
+		}
+		if (arg === "--name") {
+			name = args[i + 1];
+			i += 1;
+			continue;
+		}
+		if (arg.startsWith("--name=")) {
+			name = arg.slice("--name=".length);
+			continue;
+		}
+		if (arg === "--profile") {
+			profile = args[i + 1];
+			i += 1;
+			continue;
+		}
+		if (arg.startsWith("--profile=")) {
+			profile = arg.slice("--profile=".length);
+			continue;
+		}
 		if (arg.startsWith("-")) continue;
 		positionals.push(arg);
 	}
@@ -284,6 +332,9 @@ function parseMigrateStackArgv(
 		env: positionals[1],
 		role,
 		app,
+		instance,
+		name,
+		profile,
 		dryRun,
 		reportFile,
 		regions,

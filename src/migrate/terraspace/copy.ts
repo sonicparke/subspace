@@ -1,4 +1,5 @@
 import type { SubspaceContext } from "../../context.js";
+import { awsProfileArgs, type AwsCliOptions } from "../aws-cli.js";
 import { headObject } from "./probe.js";
 
 /**
@@ -39,12 +40,13 @@ export type CopyLegacyToNativeResult =
 export async function copyLegacyToNative(
 	ctx: SubspaceContext,
 	{ legacy, native }: CopyLegacyToNativeInput,
+	options?: AwsCliOptions,
 ): Promise<CopyLegacyToNativeResult> {
 	if (legacy.bucket === native.bucket && legacy.key === native.key) {
 		return { status: "same-location" };
 	}
 
-	const nativeProbe = await headObject(ctx, native.bucket, native.key);
+	const nativeProbe = await headObject(ctx, native.bucket, native.key, options);
 	if (nativeProbe.status === "found") {
 		return { status: "native-exists" };
 	}
@@ -57,7 +59,7 @@ export async function copyLegacyToNative(
 		};
 	}
 
-	const legacyProbe = await headObject(ctx, legacy.bucket, legacy.key);
+	const legacyProbe = await headObject(ctx, legacy.bucket, legacy.key, options);
 	if (legacyProbe.status === "missing") {
 		return { status: "legacy-missing" };
 	}
@@ -75,6 +77,7 @@ export async function copyLegacyToNative(
 		"cp",
 		`s3://${legacy.bucket}/${legacy.key}`,
 		`s3://${native.bucket}/${native.key}`,
+		...awsProfileArgs(options),
 	]);
 	if (cp.exitCode !== 0) {
 		return {

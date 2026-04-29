@@ -121,4 +121,16 @@ describe("probeStateObjects()", () => {
 			),
 		).toBe(true);
 	});
+
+	it("passes --profile to aws s3api head-object when provided", async () => {
+		const ctx = createMockContext({
+			execHandler: () => ({ stdout: "{}", stderr: "", exitCode: 0 }),
+		});
+
+		await probeStateObjects(ctx, planWithEntries(ONE_ENTRY), { profile: "vnh" });
+
+		const firstCall = ctx.execCalls[0];
+		expect(firstCall.args).toContain("--profile");
+		expect(firstCall.args).toContain("vnh");
+	});
 });

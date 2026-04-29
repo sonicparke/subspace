@@ -39,22 +39,25 @@ describe("buildMigrationPlan()", () => {
 		);
 	});
 
-	it("preserves the same backend location for each entry", () => {
+	it("derives a native backend location for each entry", () => {
 		const plan = buildMigrationPlan({
 			stacks: ["network"],
 			envs: ["prod"],
 			regions: ["us-east-1"],
 			templates: {
-				bucket: "irrelevant",
-				key: "irrelevant",
+				bucket: "terraform-state-:ACCOUNT-:REGION-:ENV",
+				key: ":PROJECT/:REGION/:ENV/:BUILD_DIR/terraform.tfstate",
 			},
 			account: "123456789012",
 			project: "main",
-			appName: "my-app",
+			name: "default",
 		});
 
+		expect(plan.entries[0].legacy.key).toBe(
+			"main/us-east-1/prod/stacks/network/terraform.tfstate",
+		);
 		expect(plan.entries[0].native.key).toBe(
-			plan.entries[0].legacy.key,
+			"main/us-east-1/stacks/network/default/terraform.tfstate",
 		);
 		expect(plan.entries[0].native.bucket).toBe(plan.entries[0].legacy.bucket);
 	});
@@ -90,6 +93,7 @@ describe("buildMigrationPlan()", () => {
 		expect(plan.entries[0].stack).toBe("network");
 		expect(plan.entries[0].env).toBe("prod");
 		expect(plan.entries[0].region).toBe("us-east-1");
+		expect(plan.entries[0].name).toBe("default");
 	});
 
 	it("returns an empty plan when no stacks are provided", () => {
@@ -105,16 +109,68 @@ describe("buildMigrationPlan()", () => {
 		expect(plan.entries).toEqual([]);
 	});
 
-	it("does not derive a separate native bucket when appName is not provided", () => {
+	it("keeps the native bucket aligned with the legacy env-scoped bucket", () => {
 		const plan = buildMigrationPlan({
 			stacks: ["network"],
 			envs: ["prod"],
 			regions: ["us-east-1"],
-			templates: { bucket: "x", key: "y" },
+			templates: {
+				bucket: "terraform-state-:ACCOUNT-:REGION-:ENV",
+				key: "legacy",
+			},
 			account: "0",
 			project: "main",
 		});
 
-		expect(plan.entries[0].native.bucket).toBe("x");
+		expect(plan.entries[0].native.bucket).toBe(
+			"terraform-state-0-us-east-1-prod",
+		);
+	});
+
+	it("derives cost-engine-ecs instance state paths", () => {
+		const plan = buildMigrationPlan({
+			stacks: ["cost-engine-ecs"],
+			envs: ["qa"],
+			regions: ["us-east-1"],
+			templates: {
+				bucket: "terraform-state-:ACCOUNT-:REGION-:ENV",
+				key: ":PROJECT/:REGION/:ENV/:APP/:BUILD_DIR/terraform.tfstate",
+			},
+			account: "733734425040",
+			project: "main",
+			app: "costengine",
+			instance: "costengine",
+			name: "costengine",
+		});
+
+		expect(plan.entries[0].legacy.bucket).toBe(
+			"terraform-state-733734425040-us-east-1-qa",
+		);
+		expect(plan.entries[0].legacy.key).toBe(
+			"main/us-east-1/qa/costengine/stacks/cost-engine-ecs.costengine/terraform.tfstate",
+		);
+		expect(plan.entries[0].native.key).toBe(
+			"main/us-east-1/stacks/cost-engine-ecs/costengine/terraform.tfstate",
+		);
+		expect(plan.entries[0].name).toBe("costengine");
+	});
+
+	it("derives named native state paths for no-env style stacks", () => {
+		const plan = buildMigrationPlan({
+			stacks: ["key-pair"],
+			envs: ["qa"],
+			regions: ["us-east-1"],
+			templates: {
+				bucket: "terraform-state-:ACCOUNT-:REGION-:ENV",
+				key: ":PROJECT/:REGION/no-env/:BUILD_DIR/terraform.tfstate",
+			},
+			account: "733734425040",
+			project: "main",
+			name: "vnh",
+		});
+
+		expect(plan.entries[0].native.key).toBe(
+			"main/us-east-1/stacks/key-pair/vnh/terraform.tfstate",
+		);
 	});
 });

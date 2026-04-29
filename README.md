@@ -211,6 +211,19 @@ On every invocation the `stacks/<stack>/` subdir is cleaned-and-rebuilt (all fil
 
 You should never need to interact with this directory directly.
 
+## .subspaceignore
+
+Create a `.subspaceignore` file at the project root to exclude stack and module source paths from `.subspace/build` copies:
+
+```gitignore
+# comments and blank lines are ignored
+*.tmp
+generated/
+app/modules/example/fixtures/
+```
+
+Patterns are matched against project-relative source paths. `*`, `?`, and `**` are supported. Patterns without `/` match any path segment, so `generated/` excludes any directory named `generated`.
+
 ## .gitignore
 
 The recommended `.gitignore` entries (included in this repo):

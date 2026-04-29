@@ -225,7 +225,60 @@ describe("invokeEngine", () => {
 		expect(stsCalls.length).toBe(0);
 	});
 
-	it("uses the existing Terraspace backend location for s3 init when migration config is present", async () => {
+	it("uses the persisted native migrated backend location for s3 init when migration config is present", async () => {
+		const ctx = createMockContext({
+			engine: "tofu",
+			cwd: "/workspace/demo-app",
+			files: {
+				"build/backend.tf": 'terraform { backend "s3" {} }',
+				"subspace.toml": MIGRATION_TOML,
+				"app/stacks/mystack/subspace.toml": `[stack]
+provider = "aws"
+
+[regions]
+values = []
+
+[provider]
+
+[migration.native_state]
+prod = "default"
+`,
+			},
+			execHandler: (cmd, args) => {
+				if (cmd === "aws" && args[0] === "sts") {
+					return {
+						stdout: JSON.stringify({ Account: "123456789012" }),
+						stderr: "",
+						exitCode: 0,
+					};
+				}
+				return { stdout: "", stderr: "", exitCode: 0 };
+			},
+			streamHandler: () => 0,
+		});
+
+		await invokeEngine(ctx, "build", "plan", "mystack", "prod", "us-east-1");
+
+		const initCall = ctx.streamCalls.find((c) => c.args.includes("init"));
+		expect(initCall).toBeDefined();
+		expect(initCall?.args).toContain(
+			"-backend-config=bucket=terraform-state-123456789012-us-east-1-prod",
+		);
+		expect(
+			initCall?.args,
+		).toContain(
+			"-backend-config=key=main/us-east-1/stacks/mystack/default/terraform.tfstate",
+		);
+		const s3cpCalls = ctx.execCalls.filter(
+			(c) => c.cmd === "aws" && c.args[0] === "s3" && c.args[1] === "cp",
+		);
+		expect(s3cpCalls.length).toBe(0);
+		expect(
+			ctx.logs.info.some((l) => /using native migrated state location/.test(l)),
+		).toBe(true);
+	});
+
+	it("falls back to the standard Subspace backend location when no native migrated mapping exists", async () => {
 		const ctx = createMockContext({
 			engine: "tofu",
 			cwd: "/workspace/demo-app",
@@ -251,19 +304,13 @@ describe("invokeEngine", () => {
 		const initCall = ctx.streamCalls.find((c) => c.args.includes("init"));
 		expect(initCall).toBeDefined();
 		expect(initCall?.args).toContain(
-			"-backend-config=bucket=terraform-state-123456789012-us-east-1-prod",
+			"-backend-config=bucket=demo-app-subspace-aws-state",
+		);
+		expect(initCall?.args).toContain(
+			"-backend-config=key=subspace/aws/us-east-1/prod/mystack/subspace.tfstate",
 		);
 		expect(
-			initCall?.args,
-		).toContain(
-			"-backend-config=key=main/us-east-1/prod/stacks/mystack/terraform.tfstate",
-		);
-		const s3cpCalls = ctx.execCalls.filter(
-			(c) => c.cmd === "aws" && c.args[0] === "s3" && c.args[1] === "cp",
-		);
-		expect(s3cpCalls.length).toBe(0);
-		expect(
-			ctx.logs.info.some((l) => /using existing Terraspace state location/.test(l)),
+			ctx.logs.warn.some((l) => /no native migrated state mapping/.test(l)),
 		).toBe(true);
 	});
 

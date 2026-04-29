@@ -19,6 +19,9 @@ export interface StackConfig {
 		settings: ProviderSettings;
 		region_overrides?: Record<string, ProviderSettings>;
 	};
+	migration?: {
+		native_state?: Record<string, string>;
+	};
 }
 
 export function parseStackConfig(content: string): StackConfig {
@@ -60,6 +63,11 @@ export function parseStackConfig(content: string): StackConfig {
 		},
 	};
 
+	const nativeState = pickDefined(parsed["migration.native_state"] ?? {});
+	if (Object.keys(nativeState).length > 0) {
+		stackConfig.migration = { native_state: nativeState };
+	}
+
 	const backendType = parsed.backend?.type as BackendType | undefined;
 	if (backendType) {
 		stackConfig.backend = {
@@ -98,6 +106,13 @@ export function serializeStackConfig(config: StackConfig): string {
 		sections["backend.settings"] = pickDefined(config.backend.settings ?? {});
 	}
 
+	if (config.migration?.native_state) {
+		const nativeState = pickDefined(config.migration.native_state);
+		if (Object.keys(nativeState).length > 0) {
+			sections["migration.native_state"] = nativeState;
+		}
+	}
+
 	for (const [region, settings] of Object.entries(
 		config.provider.region_overrides ?? {},
 	)) {
@@ -108,11 +123,11 @@ export function serializeStackConfig(config: StackConfig): string {
 }
 
 function pickDefined(
-	input: Record<string, string | undefined>,
+	input: Record<string, string | string[] | undefined>,
 ): Record<string, string> {
 	const output: Record<string, string> = {};
 	for (const [key, value] of Object.entries(input)) {
-		if (value !== undefined && value !== "") output[key] = value;
+		if (typeof value === "string" && value !== "") output[key] = value;
 	}
 	return output;
 }

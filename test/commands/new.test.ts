@@ -11,6 +11,9 @@ describe("runNew", () => {
 		expect(code).toBe(0);
 		expect(ctx.files["demo/README.md"]).toContain("# demo");
 		expect(ctx.files["demo/.gitignore"]).toContain(".subspace/");
+		expect(ctx.files["demo/.subspaceignore"]).toContain(
+			"Paths listed here are excluded",
+		);
 		expect(ctx.files["demo/config/terraform/backend.tf"]).toContain('backend "local"');
 		expect(ctx.files["demo/app/modules/.keep"]).toBe("");
 		expect(ctx.files["demo/app/stacks/.keep"]).toBe("");

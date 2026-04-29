@@ -112,7 +112,7 @@ describe("runDoctor", () => {
 		);
 	});
 
-	it("--legacy reports [preserved] when the configured state key exists for every tuple", async () => {
+	it("--legacy reports [native] when native migrated state exists for every tuple", async () => {
 		const ctx = createMockContext({
 			engine: "tofu",
 			files: {
@@ -127,11 +127,11 @@ describe("runDoctor", () => {
 
 		expect(code).toBe(0);
 		expect(
-			ctx.logs.info.some((l) => /\[preserved\].*network.*prod/.test(l)),
+			ctx.logs.info.some((l) => /\[native\].*network.*prod/.test(l)),
 		).toBe(true);
 	});
 
-	it("--legacy reports [preserved] when the preserved Terraspace key exists", async () => {
+	it("--legacy reports [native] when the native migrated key exists", async () => {
 		const ctx = createMockContext({
 			engine: "tofu",
 			files: {
@@ -150,7 +150,7 @@ describe("runDoctor", () => {
 		await runDoctor(ctx, { legacy: true });
 
 		expect(
-			ctx.logs.info.some((l) => /\[preserved\].*network.*prod/.test(l)),
+			ctx.logs.info.some((l) => /\[native\].*network.*prod/.test(l)),
 		).toBe(true);
 	});
 
@@ -177,7 +177,7 @@ describe("runDoctor", () => {
 		).toBe(true);
 	});
 
-	it("--legacy mixes [preserved] and [missing] per tuple across stacks", async () => {
+	it("--legacy mixes [native] and [missing] per tuple across stacks", async () => {
 		const ctx = createMockContext({
 			engine: "tofu",
 			files: {
@@ -202,7 +202,7 @@ describe("runDoctor", () => {
 
 		await runDoctor(ctx, { legacy: true });
 
-		expect(ctx.logs.info.some((l) => /\[preserved\].*network/.test(l))).toBe(
+		expect(ctx.logs.info.some((l) => /\[native\].*network/.test(l))).toBe(
 			true,
 		);
 		expect(ctx.logs.info.some((l) => /\[missing\].*compute/.test(l))).toBe(

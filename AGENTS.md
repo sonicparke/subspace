@@ -131,7 +131,7 @@ subspace show    <stack> [env] [--engine tofu|terraform] -- <engineArgs...>
 subspace doctor
 subspace new [project|module|stack] <name> [backend|provider] [region]
 subspace migrate init <legacy-path> [--out <dir>] [--regions <csv>] [--app-name <name>] [--force] [--dry-run]
-subspace migrate <stack> [env] [--dry-run] [--report-file <path>] [--regions <csv>] [--role <ts_role>] [--app <ts_app>]
+subspace migrate <stack> [env] [--dry-run] [--report-file <path>] [--regions <csv>] [--role <ts_role>] [--app <ts_app>] [--instance <ts_instance>] [--name <state_name>] [--profile <aws_profile>]
 ```
 
 - `STACK` is required; `ENV` is optional (base-only config when omitted).
@@ -242,7 +242,7 @@ Parsed by `src/config/project.ts`. Sections:
 
 Opt-in migration block (parsed separately by `src/migrate/config.ts`):
 - `[migration]` — `source = "terraspace"` (only supported source today)
-- `[migration.terraspace]` — `bucket_template`, `key_template`, `project`, `regions`, and optional `app_name`, `role`, `app`, `envs`
+- `[migration.terraspace]` — `bucket_template`, `key_template`, `project`, `regions`, and optional `app_name`, `role`, `app`, `instance`, `envs`
 
 The migration section is **strictly opt-in**. Pure-Terraform users never encounter it. See `docs/ideas/subspace-terraspace-migration.md`.
 

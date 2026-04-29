@@ -80,7 +80,7 @@ export function buildDirOf(
 	const parts = [typeDir, modName].filter((p): p is string => Boolean(p));
 	const base = parts.join("/");
 	if (!instance) return base;
-	return `${base}-${instance}`;
+	return `${base}.${instance}`;
 }
 
 /**
@@ -109,4 +109,20 @@ export function expandBackendKey(
 	vars: TerraspaceVars,
 ): string {
 	return expand({ template, vars: withDerivedVars(vars) });
+}
+
+export function nativeNameFromLegacyKey(
+	stack: string,
+	key: string,
+): string | null {
+	const escapedStack = escapeRegExp(stack);
+	const match = key.match(
+		new RegExp(`(?:^|/)stacks/${escapedStack}(?:\\.([^/]+))?/terraform\\.tfstate$`),
+	);
+	if (!match) return null;
+	return match[1] || "default";
+}
+
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

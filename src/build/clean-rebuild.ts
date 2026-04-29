@@ -12,6 +12,8 @@ const PRESERVED = new Set([
 /** Dirs excluded from source copy */
 const EXCLUDED_DIRS = new Set([".terraform", ".subspace", "tfvars"]);
 
+const SUBSPACE_IGNORE = ".subspaceignore";
+
 export interface CleanRebuildInput {
 	/** Source directory holding the user's stack files (e.g. `app/stacks/<name>`). */
 	stackDir: string;
@@ -59,10 +61,11 @@ export async function cleanRebuild(
 	const { stackDir, buildRoot, stackName, moduleSourceRoots } = input;
 	const stackWorkDir = `${buildRoot}/stacks/${stackName}`;
 	const modulesDir = `${buildRoot}/modules`;
+	const ignore = await loadSubspaceIgnore(ctx);
 
 	await ctx.fs.mkdir(stackWorkDir, { recursive: true });
 	await cleanStackWorkDir(ctx, stackWorkDir);
-	await copyStackSource(ctx, stackDir, stackWorkDir);
+	await copyStackSource(ctx, stackDir, stackWorkDir, ignore);
 
 	await ctx.fs.rm(modulesDir, { recursive: true, force: true });
 	await stageReferencedModules(ctx, {
@@ -70,6 +73,7 @@ export async function cleanRebuild(
 		sourceRef: `stacks/${stackName}`,
 		modulesDir,
 		moduleSourceRoots,
+		ignore,
 	});
 }
 
@@ -102,6 +106,7 @@ async function copyStackSource(
 	ctx: SubspaceContext,
 	stackDir: string,
 	destDir: string,
+	ignore: SubspaceIgnore,
 ): Promise<void> {
 	const entries = await ctx.fs.readdir(stackDir);
 
@@ -110,14 +115,162 @@ async function copyStackSource(
 
 		const srcPath = `${stackDir}/${entry}`;
 		const destPath = `${destDir}/${entry}`;
-		const stat = await ctx.fs.stat(srcPath);
 
-		if (stat.isDirectory()) {
-			await ctx.fs.cp(srcPath, destPath, { recursive: true });
-		} else {
-			const content = await ctx.fs.readFile(srcPath);
-			await ctx.fs.writeFile(destPath, content);
+		await copyPathFiltered(ctx, srcPath, destPath, ignore);
+	}
+}
+
+interface SubspaceIgnore {
+	isIgnored(path: string, isDirectory: boolean): boolean;
+}
+
+interface IgnoreRule {
+	pattern: string;
+	hasSlash: boolean;
+	re: RegExp;
+}
+
+async function loadSubspaceIgnore(ctx: SubspaceContext): Promise<SubspaceIgnore> {
+	if (!(await ctx.fs.exists(SUBSPACE_IGNORE))) {
+		return EMPTY_IGNORE;
+	}
+
+	const content = await ctx.fs.readFile(SUBSPACE_IGNORE);
+	const rules = parseSubspaceIgnore(content);
+	if (rules.length === 0) return EMPTY_IGNORE;
+
+	return {
+		isIgnored: (path, isDirectory) =>
+			rules.some((rule) => ruleMatchesPath(rule, path, isDirectory)),
+	};
+}
+
+const EMPTY_IGNORE: SubspaceIgnore = {
+	isIgnored: () => false,
+};
+
+function parseSubspaceIgnore(content: string): IgnoreRule[] {
+	return content
+		.replace(/^\uFEFF/, "")
+		.split(/\r?\n/)
+		.map((line) => line.trim())
+		.filter((line) => line.length > 0 && !line.startsWith("#"))
+		.map((line) => {
+			const normalized = normalizeIgnorePattern(line);
+			if (!normalized) return null;
+			return {
+				...normalized,
+				re: globToRegExp(normalized.pattern),
+			};
+		})
+		.filter((rule): rule is IgnoreRule => rule !== null);
+}
+
+function normalizeIgnorePattern(
+	line: string,
+): Pick<IgnoreRule, "pattern" | "hasSlash"> | null {
+	let pattern = line.replaceAll("\\", "/");
+	while (pattern.startsWith("./")) pattern = pattern.slice(2);
+
+	pattern = pattern.replace(/^\/+/, "").replace(/\/+$/, "");
+	if (!pattern) return null;
+
+	return {
+		pattern,
+		hasSlash: pattern.includes("/"),
+	};
+}
+
+function ruleMatchesPath(
+	rule: IgnoreRule,
+	path: string,
+	isDirectory: boolean,
+): boolean {
+	const normalized = normalizeRelativePath(path);
+	if (!normalized) return false;
+
+	if (!rule.hasSlash) {
+		return normalized.split("/").some((segment) => rule.re.test(segment));
+	}
+
+	if (rule.re.test(normalized)) return true;
+
+	const ancestors = ancestorPaths(normalized, isDirectory);
+	return ancestors.some((ancestor) => rule.re.test(ancestor));
+}
+
+function ancestorPaths(path: string, isDirectory: boolean): string[] {
+	const parts = path.split("/");
+	const limit = isDirectory ? parts.length : parts.length - 1;
+	const ancestors: string[] = [];
+
+	for (let i = 1; i <= limit; i++) {
+		ancestors.push(parts.slice(0, i).join("/"));
+	}
+
+	return ancestors;
+}
+
+function normalizeRelativePath(path: string): string {
+	return path.replaceAll("\\", "/").replace(/^\.\/+/, "").replace(/\/+$/, "");
+}
+
+function globToRegExp(pattern: string): RegExp {
+	let out = "^";
+
+	for (let i = 0; i < pattern.length; i++) {
+		const ch = pattern[i];
+		const next = pattern[i + 1];
+
+		if (ch === "*" && next === "*") {
+			out += ".*";
+			i++;
+			continue;
 		}
+		if (ch === "*") {
+			out += "[^/]*";
+			continue;
+		}
+		if (ch === "?") {
+			out += "[^/]";
+			continue;
+		}
+
+		out += escapeRegExp(ch);
+	}
+
+	return new RegExp(`${out}$`);
+}
+
+function escapeRegExp(ch: string): string {
+	return /[\\^$+?.()|[\]{}]/.test(ch) ? `\\${ch}` : ch;
+}
+
+async function copyPathFiltered(
+	ctx: SubspaceContext,
+	srcPath: string,
+	destPath: string,
+	ignore: SubspaceIgnore,
+): Promise<void> {
+	const stat = await ctx.fs.stat(srcPath);
+	if (ignore.isIgnored(srcPath, stat.isDirectory())) return;
+
+	if (!stat.isDirectory()) {
+		const content = await ctx.fs.readFile(srcPath);
+		await ctx.fs.writeFile(destPath, content);
+		return;
+	}
+
+	await ctx.fs.mkdir(destPath, { recursive: true });
+	const entries = await ctx.fs.readdir(srcPath);
+
+	for (const entry of entries) {
+		await copyPathFiltered(
+			ctx,
+			`${srcPath}/${entry}`,
+			`${destPath}/${entry}`,
+			ignore,
+		);
 	}
 }
 
@@ -166,6 +319,8 @@ interface StageModulesInput {
 	modulesDir: string;
 	/** Source-of-truth roots for module copies, searched in order. */
 	moduleSourceRoots: ModuleSourceRoot[];
+	/** Project-level copy exclusions. */
+	ignore: SubspaceIgnore;
 }
 
 /**
@@ -179,7 +334,7 @@ async function stageReferencedModules(
 	ctx: SubspaceContext,
 	input: StageModulesInput,
 ): Promise<void> {
-	const { modulesDir, moduleSourceRoots } = input;
+	const { modulesDir, moduleSourceRoots, ignore } = input;
 	const staged = new Set<string>();
 	const queue: Array<{ dir: string; ref: string }> = [
 		{ dir: input.seedDir, ref: input.sourceRef },
@@ -213,7 +368,12 @@ async function stageReferencedModules(
 			}
 			// Staged dir name must match the `source` path segment in user .tf (e.g. `key-pair`), even if the repo uses `key_pair/`.
 			const dest = `${modulesDir}/${name}`;
-			await ctx.fs.cp(resolved, dest, { recursive: true });
+			if (ignore.isIgnored(resolved, true)) {
+				throw new Error(
+					`module path "modules/${name}" referenced in ${current.ref} but ${resolved}/ is ignored by ${SUBSPACE_IGNORE}`,
+				);
+			}
+			await copyPathFiltered(ctx, resolved, dest, ignore);
 			staged.add(name);
 			queue.push({ dir: dest, ref: `modules/${name}` });
 		}

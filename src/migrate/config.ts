@@ -14,6 +14,8 @@ export interface TerraspaceMigrationConfig {
 	role?: string;
 	/** Terraspace `TS_APP` (or similar) for legacy `:APP` in the key template. */
 	app?: string;
+	/** Terraspace stack instance used to derive `:BUILD_DIR` (for example `stack.instance`). */
+	instance?: string;
 	appName?: string;
 }
 
@@ -70,6 +72,7 @@ export function parseMigrationConfig(content: string): MigrationConfig | null {
 		const appName = ts.app_name as string | undefined;
 		const role = optionalNonEmptyString(ts.role);
 		const app = optionalNonEmptyString(ts.app);
+		const instance = optionalNonEmptyString(ts.instance);
 		const envsRaw = ts.envs;
 		const envs = normalizeStringList(envsRaw);
 
@@ -83,6 +86,7 @@ export function parseMigrationConfig(content: string): MigrationConfig | null {
 				envs: envs.length ? envs : undefined,
 				role,
 				app,
+				instance,
 				appName,
 			},
 		};

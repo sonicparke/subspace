@@ -99,14 +99,13 @@ well-defined seams — and refuses to absorb anything else.
    runtime env vars that Subspace commands respect. Old CI pipelines
    do not magically work; the migration tool rewrites them.
 
-2. **Dual-read state at the backend layer.** Subspace's backend-config
-   injection learns two keys: the native key
-   (`subspace/<scope>/<region>/<env>/<stack>/subspace.tfstate`) and
-   the legacy Terraspace key (derived from the old project shape).
-   On `init`, Subspace configures the backend with the native key.
-   If the native key doesn't exist in the remote backend, Subspace
-   copies the legacy object to the native key *once*, before the first
-   `plan`. Terraform thereafter writes exclusively to the native key.
+2. **Native state after migration.** Subspace derives the legacy
+   Terraspace key only to find the old state object. `subspace migrate`
+   then copies that object to a native migrated key:
+   `main/<region>/stacks/<stack>/<name>/terraform.tfstate` in the same
+   env-scoped S3 bucket. Terraform thereafter writes exclusively to the
+   native key. The legacy object is preserved until an explicit prune
+   command removes it.
    No `terraform import`. No resource churn.
 
 3. **`subspace migrate` follows Subspace's native `<stack> [env]` shape.**
@@ -124,6 +123,7 @@ well-defined seams — and refuses to absorb anything else.
        [--dry-run]                         # from cwd subspace.toml,
        [--report-file <path>]              # build a single-row plan,
        [--regions ...]                     # probe legacy + native S3 keys
+       [--name <state_name>]               # native state identity
    ```
 
    `migrate init` is offline (no AWS calls). It writes `subspace.toml`
@@ -184,12 +184,13 @@ awaiting a human to run it against real projects (see
   never touches `.tf` files or state. Offline.
   ([src/commands/migrate-init.ts](../../src/commands/migrate-init.ts))
 - [x] `subspace migrate <stack> [env] --dry-run` — reads `[migration]`
-  from cwd `subspace.toml`, derives legacy + native S3 keys,
+  from cwd `subspace.toml`, derives legacy and native S3 keys,
   probes both with `aws s3api head-object`, prints a markdown
   report. Read-only.
   ([src/commands/migrate-stack.ts](../../src/commands/migrate-stack.ts))
-- [x] Dual-read backend injection: if native state key doesn't exist
-  on `init`, copy from legacy key; then proceed as normal.
+- [x] Native migrated backend injection: after `subspace migrate`
+  records the native state name in stack config, `plan`/`apply` init
+  uses the native migrated key directly.
   ([src/engine/invoke.ts](../../src/engine/invoke.ts),
   [src/migrate/terraspace/copy.ts](../../src/migrate/terraspace/copy.ts))
 - [x] `subspace doctor` gains a `--legacy` mode that lists which stacks

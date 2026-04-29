@@ -1,4 +1,5 @@
 import type { SubspaceContext } from "../context.js";
+import { loadStackConfig } from "../config/stack-config.js";
 import { loadMigrationConfig } from "../migrate/config.js";
 import { buildMigrationPlan } from "../migrate/terraspace/plan.js";
 import { backendConfigFlags, detectBackend, type BackendType } from "./backend.js";
@@ -236,6 +237,15 @@ async function resolveBackendConfigFlags(
 	}
 
 	const ts = migration.terraspace;
+	const stackConfig = await loadStackConfig(ctx, stack);
+	const nativeName = stackConfig?.migration?.native_state?.[env || "__noenv__"];
+	if (!nativeName) {
+		ctx.log.warn(
+			`[migration] no native migrated state mapping found for stack "${stack}" env "${env || "__noenv__"}"; falling back to the standard Subspace backend config.`,
+		);
+		return defaultFlags;
+	}
+
 	const plan = buildMigrationPlan({
 		stacks: [stack],
 		envs: [env],
@@ -246,12 +256,14 @@ async function resolveBackendConfigFlags(
 		appName: ts.appName,
 		role: ts.role,
 		app: ts.app,
+		instance: ts.instance,
+		name: nativeName,
 	});
 	const entry = plan.entries[0];
 	if (!entry) return defaultFlags;
 
 	ctx.log.info(
-		`[migration] using existing Terraspace state location s3://${entry.native.bucket}/${entry.native.key}`,
+		`[migration] using native migrated state location s3://${entry.native.bucket}/${entry.native.key}`,
 	);
 
 	return backendConfigFlags(backend, stack, env, region, appNameFromCwd(ctx.cwd), {

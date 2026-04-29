@@ -216,4 +216,24 @@ describe("copyLegacyToNative()", () => {
 		);
 		expect(cpCalls.length).toBe(1);
 	});
+
+	it("passes --profile to head-object and s3 cp calls when provided", async () => {
+		const ctx = createMockContext({
+			execHandler: execHandlerFor({
+				[`${NATIVE.bucket}/${NATIVE.key}`]: "missing",
+				[`${LEGACY.bucket}/${LEGACY.key}`]: "found",
+			}),
+		});
+
+		await copyLegacyToNative(
+			ctx,
+			{ legacy: LEGACY, native: NATIVE },
+			{ profile: "vnh" },
+		);
+
+		for (const call of ctx.execCalls) {
+			expect(call.args).toContain("--profile");
+			expect(call.args).toContain("vnh");
+		}
+	});
 });

@@ -11,12 +11,15 @@ export interface MigrationPlanInput {
 	app?: string;
 	role?: string;
 	extra?: string;
+	instance?: string;
+	name?: string;
 }
 
 export interface MigrationPlanEntry {
 	stack: string;
 	env: string;
 	region: string;
+	name: string;
 	legacy: { bucket: string; key: string };
 	native: { bucket: string; key: string };
 }
@@ -56,19 +59,34 @@ function buildEntry(
 		type: "stack",
 		type_dir: "stacks",
 		mod_name: stack,
+		instance: input.instance,
 	};
 
 	const legacyBucket = expandBackendKey(input.templates.bucket, vars);
 	const legacyKey = expandBackendKey(input.templates.key, vars);
+	const name = input.name ?? input.instance ?? "default";
+	const nativeKey = nativeStateKey({
+		project: input.project,
+		region,
+		stack,
+		name,
+	});
 
 	return {
 		stack,
 		env,
 		region,
+		name,
 		legacy: { bucket: legacyBucket, key: legacyKey },
-		// Terraspace migration preserves the existing remote state location.
-		// "native" here means the backend Subspace will use after repo migration,
-		// which intentionally remains the same S3 object.
-		native: { bucket: legacyBucket, key: legacyKey },
+		native: { bucket: legacyBucket, key: nativeKey },
 	};
+}
+
+export function nativeStateKey(input: {
+	project: string;
+	region: string;
+	stack: string;
+	name: string;
+}): string {
+	return `${input.project}/${input.region}/stacks/${input.stack}/${input.name}/terraform.tfstate`;
 }

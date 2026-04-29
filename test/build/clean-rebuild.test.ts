@@ -138,6 +138,52 @@ describe("cleanRebuild", () => {
 		expect(ctx.files[`${stackWorkDir}/.subspace/something`]).toBeUndefined();
 	});
 
+	it("excludes stack source paths listed in .subspaceignore", async () => {
+		const ctx = createMockContext({
+			files: {
+				".subspaceignore": "# generated files\n*.tmp\ngenerated/\n",
+				"app/stacks/mystack/main.tf": "root",
+				"app/stacks/mystack/generated/main.tf": "generated",
+				"app/stacks/mystack/notes.tmp": "scratch",
+				"app/stacks/mystack/nested/keep.tf": "keep",
+			},
+		});
+
+		await cleanRebuild(ctx, {
+			stackDir: "app/stacks/mystack",
+			...DEFAULTS,
+		});
+
+		expect(ctx.files[`${stackWorkDir}/main.tf`]).toBe("root");
+		expect(ctx.files[`${stackWorkDir}/nested/keep.tf`]).toBe("keep");
+		expect(ctx.files[`${stackWorkDir}/generated/main.tf`]).toBeUndefined();
+		expect(ctx.files[`${stackWorkDir}/notes.tmp`]).toBeUndefined();
+	});
+
+	it("excludes module source paths listed in .subspaceignore", async () => {
+		const ctx = createMockContext({
+			files: {
+				".subspaceignore": "fixtures/\n*.tmp\n",
+				"app/stacks/mystack/main.tf":
+					'module "vpc" { source = "../../modules/vpc" }',
+				"app/modules/vpc/main.tf": "vpc",
+				"app/modules/vpc/fixtures/input.json": "{}",
+				"app/modules/vpc/scratch.tmp": "scratch",
+				"app/modules/vpc/nested/keep.tf": "keep",
+			},
+		});
+
+		await cleanRebuild(ctx, {
+			stackDir: "app/stacks/mystack",
+			...DEFAULTS,
+		});
+
+		expect(ctx.files[`${modulesDir}/vpc/main.tf`]).toBe("vpc");
+		expect(ctx.files[`${modulesDir}/vpc/nested/keep.tf`]).toBe("keep");
+		expect(ctx.files[`${modulesDir}/vpc/fixtures/input.json`]).toBeUndefined();
+		expect(ctx.files[`${modulesDir}/vpc/scratch.tmp`]).toBeUndefined();
+	});
+
 	it("copies subdirectories recursively", async () => {
 		const ctx = createMockContext({
 			files: {
